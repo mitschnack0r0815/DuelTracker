@@ -1,0 +1,23 @@
+## Interface: 16001
+## Title: Duel Tracker
+## Notes: Records your duels with their combat log, and your wins and losses against each player
+## Author: You
+## Version: 0.1
+## SavedVariables: DuelTrackerDB
+
+# Core: data and rules (no UI)
+Core\Config.lua
+Core\Data.lua
+Core\Comm.lua
+Core\Duels.lua
+Core\TestData.lua
+
+# UI: a spellbook style window, one file per tab
+UI\Book.lua
+UI\Window.lua
+UI\OpponentsTab.lua
+UI\DuelsTab.lua
+UI\LogTab.lua
+UI\MinimapButton.lua
+
+Core\Commands.lua
