@@ -2,11 +2,12 @@ local _, ns = ...
 local Book = ns.Book
 
 -- Opponents tab, the home tab. Left page: your overall record, how duels ended and the
--- latest duels. Right page: everyone you dueled with your record against them; click one
--- to see those duels on the Log tab.
+-- latest duels. Right page: everyone you dueled with their Elo rating (if known) and your
+-- record against them; click one to see those duels on the Duels tab.
 local ROW_HEIGHT = 20
 local CONTENT_X = Book.CONTENT_X
 local COL_WIDTH = 60 -- width of each number column
+local BADGE_WIDTH = 24 -- rank badge column, left of the rating
 
 local panel = ns.AddTab("Opponents")
 local left, right = panel.left, panel.right
@@ -47,7 +48,11 @@ end
 -- Left page: record
 ---------------------------------------------------------------------------
 
-Book.CreateHeader(left, "Overview")
+local overviewHeader = Book.CreateHeader(left, "Overview")
+-- Our Elo rating with its rank badge, on the right end of the header line
+local ratingText = Book.CreateText(overviewHeader, Book.BOLD_NAME_FONT)
+ratingText:SetPoint("RIGHT", overviewHeader, "TOPRIGHT", 0, -20)
+ratingText:SetJustifyH("RIGHT")
 local summary = Text(left, Book.TEXT_FONT, -100)
 local eloLine = Text(left, nil, -122)
 
@@ -165,6 +170,9 @@ end
 local function RefreshRecord()
 	local duels = ns.GetDuels()
 	local wins, losses = ns.GetRecord()
+	local rating = ns.GetMyRating()
+	-- "Knight-Captain [badge] 1546", the rank's name for our faction
+	ratingText:SetText(("%s  %s"):format(ns.GetRankName(ns.GetRank(rating)), ns.RatingText(rating, 22)))
 
 	local total = wins + losses
 	if total == 0 then
@@ -199,6 +207,7 @@ local TABLE_BOTTOM = Book.CONTENT_BOTTOM
 local ROWS_PER_PAGE = floor((TABLE_TOP - TABLE_BOTTOM) / ROW_HEIGHT) - 1
 
 Text(right, nil, TABLE_TOP):SetText("Player")
+Number(right, nil, TABLE_TOP, 3):SetText("Rating")
 Number(right, nil, TABLE_TOP, 2):SetText("Won")
 Number(right, nil, TABLE_TOP, 1):SetText("Lost")
 local empty = Text(right, Book.TEXT_FONT, TABLE_TOP - ROW_HEIGHT - 4)
@@ -234,6 +243,11 @@ local function GetRow(i)
 		row.icon:SetSize(ROW_HEIGHT - 4, ROW_HEIGHT - 4)
 		row.icon:SetPoint("LEFT", 6, 0)
 		row.name = Text(right, Book.BOLD_FONT, y, CONTENT_X + ROW_HEIGHT + 4)
+		row.rating = Number(right, Book.TEXT_FONT, y, 3)
+		-- The rank badge in a column of its own, left of the rating
+		row.badge = right:CreateTexture(nil, "ARTWORK")
+		row.badge:SetSize(16, 16)
+		row.badge:SetPoint("TOPRIGHT", -Book.PAGE_MARGIN - 3 * COL_WIDTH - (BADGE_WIDTH - 16) / 2, y + 1)
 		row.won = Number(right, Book.TEXT_FONT, y, 2)
 		row.lost = Number(right, Book.TEXT_FONT, y, 1)
 		row.stripe = i % 2 == 1 and Stripe(right, y) or nil
@@ -248,6 +262,8 @@ end
 local function ShowRow(row, shown)
 	row:SetShown(shown)
 	row.name:SetShown(shown)
+	row.rating:SetShown(shown)
+	row.badge:SetShown(shown and row.opponent and row.opponent.rating ~= nil)
 	row.won:SetShown(shown)
 	row.lost:SetShown(shown)
 	if row.stripe then
@@ -270,6 +286,10 @@ function RefreshOpponents()
 			-- Class, not spec: one player can show up in different specs across duels
 			ns.SetDuelistIcon(row.icon, opponent.class)
 			row.name:SetText(ns.InkName(opponent.name))
+			row.rating:SetText(opponent.rating or "-")
+			if opponent.rating then
+				row.badge:SetTexture(ns.GetRankIcon(ns.GetRank(opponent.rating)))
+			end
 			row.won:SetText(opponent.wins)
 			row.lost:SetText(opponent.losses)
 			ShowRow(row, true)

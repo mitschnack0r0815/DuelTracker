@@ -1,7 +1,8 @@
 local _, ns = ...
 
 ns.ICON = "Interface\\Icons\\Ability_DualWield" -- two swords
-ns.ELO_ICON = "Interface\\PvPRankBadges\\PvPRank06" -- badge behind the names in Elo duels
+-- Badge of Elo duels from before ratings were swapped; the others show our rank after them
+ns.ELO_ICON = "Interface\\PvPRankBadges\\PvPRank06"
 ns.LOG_ICON = "Interface\\Icons\\INV_Scroll_03" -- before the length of duels with a log
 
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
@@ -38,8 +39,18 @@ ns.VERDICTS = {
 	{ limit = 100, text = "Obliterated", win = { 0.3, 1, 0 }, loss = { 0.65, 0, 0 } },
 }
 
+-- Test tab with the test data buttons, shown and hidden by right-clicking the minimap
+-- button; false leaves it out completely (/duels test still works)
+ns.SHOW_TEST_TAB = true
+
 -- Made-up duels added by the "Add test duels" button and /duels test
 ns.TEST_DUELS = 25
+-- Share of test duels that are Elo duels: against duelists, and against the one former
+-- duelist; the other test opponents only get normal duels
+ns.TEST_ELO_PERCENT = 70
+ns.TEST_FORMER_ELO_PERCENT = 40
+-- Share of test duels with a combat log (and the damage and healing totals from it)
+ns.TEST_LOG_PERCENT = 20
 
 -- Seconds between tries to inspect the opponent for their talents
 ns.INSPECT_INTERVAL = 3
@@ -65,6 +76,13 @@ ns.SEND_RATE = 1
 -- Elo ratings: everyone starts at ELO_START, ELO_K is how much one duel can move it
 ns.ELO_START = 1500
 ns.ELO_K = 32
+
+-- PvP rank badges (1-14) shown next to ratings. By default rank 1 is below RANK_MIN,
+-- rank 14 from RANK_MAX up, ranks 2-13 evenly in between; each player can set every
+-- rank's lowest rating on the Config tab.
+ns.RANK_MIN = 1000
+ns.RANK_MAX = 2000
+ns.RANKS = 14
 
 -- Targeting a duelist asks for their Elo rating, at most every this many seconds each
 ns.RATING_ASK_INTERVAL = 300

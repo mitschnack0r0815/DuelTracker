@@ -47,22 +47,15 @@ function Book.CreateText(parent, font)
 	return text
 end
 
--- Top bar and two parchment pages on frame. Sets frame.leftPage and frame.rightPage to
--- the page areas (below the top bar).
+-- Two parchment pages filling frame. Sets frame.leftPage and frame.rightPage to them.
 function Book.CreateBookArt(frame)
-	local topBar = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
-	topBar:SetPoint("TOPLEFT")
-	topBar:SetPoint("TOPRIGHT")
-	topBar:SetHeight(54)
-	Book.SetArt(topBar, "spellbook-background-evergreen-header", 0.12, 0.09, 0.06, 1)
-
 	local leftBG = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
-	leftBG:SetPoint("TOPLEFT", 0, -51)
+	leftBG:SetPoint("TOPLEFT")
 	leftBG:SetPoint("BOTTOMRIGHT", frame, "BOTTOM")
 	Book.SetArt(leftBG, "spellbook-background-evergreen-left", 0.82, 0.72, 0.54, 1)
 
 	local rightBG = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
-	rightBG:SetPoint("TOPLEFT", frame, "TOP", 0, -51)
+	rightBG:SetPoint("TOPLEFT", frame, "TOP")
 	rightBG:SetPoint("BOTTOMRIGHT")
 	Book.SetArt(rightBG, "spellbook-background-evergreen-right", 0.82, 0.72, 0.54, 1)
 
@@ -72,7 +65,7 @@ function Book.CreateBookArt(frame)
 		local ribbon = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
 		ribbon:SetAtlas("spellbook-background-evergreen-ribbon")
 		frame:SetScript("OnSizeChanged", function(self, width, height)
-			local scale = (height - 51) / BLIZZARD_BOOK_HEIGHT
+			local scale = height / BLIZZARD_BOOK_HEIGHT
 			ribbon:SetSize(ribbonInfo.width * scale, ribbonInfo.height * scale)
 			ribbon:ClearAllPoints()
 			ribbon:SetPoint("TOPRIGHT", leftBG, "TOPRIGHT", 62 * scale, 0)

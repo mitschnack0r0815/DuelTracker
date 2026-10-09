@@ -8,7 +8,7 @@ local button = CreateFrame("Button", "DuelTrackerMinimapButton", Minimap)
 button:SetSize(31, 31)
 button:SetFrameStrata("MEDIUM")
 button:SetFrameLevel(8)
-button:RegisterForClicks("LeftButtonUp")
+button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 button:RegisterForDrag("LeftButton")
 button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
@@ -59,8 +59,14 @@ button:SetScript("OnDragStop", function(self)
 	self:SetScript("OnUpdate", nil)
 end)
 
-button:SetScript("OnClick", function()
-	ns.ToggleWindow()
+button:SetScript("OnClick", function(self, mouseButton)
+	if mouseButton == "RightButton" then
+		if ns.ToggleTestTab then -- only when the Test tab exists (ns.SHOW_TEST_TAB)
+			ns.ToggleTestTab()
+		end
+	else
+		ns.ToggleWindow()
+	end
 end)
 
 button:SetScript("OnEnter", function(self)
@@ -69,6 +75,9 @@ button:SetScript("OnEnter", function(self)
 	GameTooltip:AddLine("Duel Tracker")
 	GameTooltip:AddLine(("%d wins, %d losses"):format(wins, losses), 1, 1, 1)
 	GameTooltip:AddLine("Click: Open", 0.7, 0.7, 0.7)
+	if ns.ToggleTestTab then
+		GameTooltip:AddLine("Right-click: Show or hide the Test tab", 0.7, 0.7, 0.7)
+	end
 	GameTooltip:AddLine("Drag: move", 0.7, 0.7, 0.7)
 	GameTooltip:Show()
 end)

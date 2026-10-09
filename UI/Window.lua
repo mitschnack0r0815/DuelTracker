@@ -6,7 +6,7 @@ local Book = ns.Book
 -- tab's two pages.
 local window = CreateFrame("Frame", "DuelTrackerMainFrame", UIParent,
 	Book.TemplateExists("PortraitFrameTemplate") and "PortraitFrameTemplate" or "BasicFrameTemplate")
-local WIDTH, HEIGHT = 1260, 760
+local WIDTH, HEIGHT = 1260, 709
 window:SetSize(WIDTH, HEIGHT)
 window:SetPoint("TOP", UIParent, "TOP", 0, -60)
 window:SetFrameStrata("HIGH")
@@ -49,24 +49,6 @@ credit:SetJustifyH("RIGHT")
 credit:SetAlpha(0.6)
 credit:SetText(("made by mitschnack0r, alpha v%s"):format(ns.VERSION))
 
--- Test data buttons in the top bar, like /duels test and /duels cleartest
-local clearTestButton = CreateFrame("Button", nil, book, "UIPanelButtonTemplate")
-clearTestButton:SetSize(130, 24)
-clearTestButton:SetPoint("TOPRIGHT", -24, -14)
-clearTestButton:SetText("Clear test duels")
-clearTestButton:SetScript("OnClick", function()
-	print(("Duel Tracker: removed %d test duels."):format(ns.ClearTestData()))
-end)
-
-local addTestButton = CreateFrame("Button", nil, book, "UIPanelButtonTemplate")
-addTestButton:SetSize(130, 24)
-addTestButton:SetPoint("RIGHT", clearTestButton, "LEFT", -6, 0)
-addTestButton:SetText("Add test duels")
-addTestButton:SetScript("OnClick", function()
-	ns.AddTestData(ns.TEST_DUELS)
-	print(("Duel Tracker: added %d test duels."):format(ns.TEST_DUELS))
-end)
-
 window:SetScript("OnShow", function()
 	PlaySound(SOUNDKIT.IG_SPELLBOOK_OPEN)
 end)
@@ -79,9 +61,9 @@ end)
 ---------------------------------------------------------------------------
 
 Book.CONTENT_X = Book.PAGE_MARGIN + 12 -- left edge of page content, lined up with the headers
--- Lowest y on a page that content may reach, above the pager (pages start 74 below the
--- window's top, the pager takes the bottom 66)
-Book.CONTENT_BOTTOM = -(HEIGHT - 74 - 76)
+-- Lowest y on a page that content may reach, above the pager (pages start 23 below the
+-- window's top, right under its title; the pager takes the bottom 66)
+Book.CONTENT_BOTTOM = -(HEIGHT - 23 - 76)
 Book.MUTED = "|cff6b5a45" -- faded ink for less important text
 Book.MINE = "|cff1f3f8f" -- us in the combat log
 Book.THEIRS = "|cff8f3f1f" -- the opponent
@@ -108,11 +90,21 @@ end
 
 -- Elo badge and rating change of an Elo duel ("+14": green or red, faded when the duel
 -- was disputed and doesn't count); "" for other duels
+-- Badge of an Elo duel: our rank right after it (before it when it was disputed and
+-- didn't count); the plain Elo badge for Elo duels from before ratings were swapped
+function ns.GetDuelBadge(duel)
+	if not duel.myElo then
+		return ns.ELO_ICON
+	end
+	local after = duel.myElo + (duel.disputed and 0 or duel.eloChange or 0)
+	return ns.GetRankIcon(ns.GetRank(after))
+end
+
 function ns.EloText(duel)
 	if not duel.elo then
 		return ""
 	end
-	local badge = ("|T%s:14:14|t"):format(ns.ELO_ICON)
+	local badge = ("|T%s:14:14|t"):format(ns.GetDuelBadge(duel))
 	if not duel.eloChange then
 		return badge
 	end
@@ -168,11 +160,12 @@ function ns.DescribeHealth(duel)
 	local function Side(key, name)
 		local first = health.start and health.start[key]
 		local last = health.ends and health.ends[key]
-		local startText = first and ("%d/%d"):format(first.hp, first.max) or "?"
+		local startText = first and ("%d/%d HP"):format(first.hp, first.max) or "?"
 		local endText = "?"
 		if last then
 			-- The max only when it changed, say by a buff during the fight
-			endText = (first and first.max == last.max) and tostring(last.hp) or ("%d/%d"):format(last.hp, last.max)
+			endText = (first and first.max == last.max) and ("%d HP"):format(last.hp)
+				or ("%d/%d HP"):format(last.hp, last.max)
 		end
 		return ("%s: %s at the start, %s at the end"):format(name, startText, endText)
 	end
@@ -306,6 +299,12 @@ function ns.HasLog(duel)
 	return duel.log ~= nil or duel.logged == true
 end
 
+-- A duel to link to the Log tab: it has a log and extended logging is on (else there's
+-- no Log tab)
+function ns.ShowsLog(duel)
+	return ns.IsCombatLogEnabled() and ns.HasLog(duel)
+end
+
 ---------------------------------------------------------------------------
 -- Tabs
 ---------------------------------------------------------------------------
@@ -315,7 +314,24 @@ local hasTabTemplate = Book.TemplateExists("PanelTabButtonTemplate")
 
 local tabs = {}
 local panels = {}
+local hiddenTabs = {} -- [index] = true for tabs switched off (ns.SetTabShown)
 local currentTab
+
+-- Lines the shown tabs up from the left, closing the gaps of hidden ones
+local function LayoutTabs()
+	local previous
+	for i, tab in ipairs(tabs) do
+		tab:ClearAllPoints()
+		if not hiddenTabs[i] then
+			if previous then
+				tab:SetPoint("LEFT", previous, "RIGHT", 3, 0)
+			else
+				tab:SetPoint("TOPLEFT", window, "BOTTOMLEFT", 22, 2)
+			end
+			previous = tab
+		end
+	end
+end
 
 local function SelectTab(index)
 	currentTab = index
@@ -341,11 +357,6 @@ function ns.AddTab(text)
 		hasTabTemplate and "PanelTabButtonTemplate" or "UIPanelButtonTemplate")
 	tab:SetID(index)
 	tab:SetText(text)
-	if index == 1 then
-		tab:SetPoint("TOPLEFT", window, "BOTTOMLEFT", 22, 2)
-	else
-		tab:SetPoint("LEFT", tabs[index - 1], "RIGHT", 3, 0)
-	end
 	if hasTabTemplate then
 		PanelTemplates_TabResize(tab, 0)
 	else
@@ -356,6 +367,7 @@ function ns.AddTab(text)
 		PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
 	end)
 	tabs[index] = tab
+	LayoutTabs()
 
 	local panel = CreateFrame("Frame", nil, book)
 	panel:SetAllPoints()
@@ -370,6 +382,21 @@ function ns.AddTab(text)
 		PanelTemplates_SetNumTabs(window, index)
 	end
 	return panel, index
+end
+
+-- Shows or hides a tab (say one switched off in the settings); the window leaves a
+-- hidden tab for the first one
+function ns.SetTabShown(index, shown)
+	hiddenTabs[index] = not shown or nil
+	tabs[index]:SetShown(shown)
+	LayoutTabs()
+	if not shown and currentTab == index then
+		SelectTab(1)
+	end
+end
+
+function ns.IsTabShown(index)
+	return not hiddenTabs[index]
 end
 
 -- Opens the window on the given tab, or closes it if that tab is already showing

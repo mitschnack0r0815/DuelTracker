@@ -31,7 +31,10 @@ local _, ns = ...
 --                 d = destination (1 us, 2 opponent, nil none), n = spell name,
 --                 a = amount, c = true on crits, x = miss type, aura type or other spell }
 --   }
---   settings = { combatLog = true to write the combat log file during duels (off by default) }
+--   settings = { combatLog = true for extended logging: the combat log file during duels
+--                and the Log tab (off by default),
+--                rankFrom = { [2] .. [14] = lowest rating of each rank } when changed
+--                on the Config tab, testTab = true while the Test tab is shown }
 --   logging = true while we have the combat log file on (switched off again after a reload)
 --   minimap = { angle, hide }
 --   duelists = { ["Name-Realm"] = { added = server time, class, test, rating, ratingT } },
@@ -103,8 +106,17 @@ function ns.GetDuels(opp)
 	return list
 end
 
--- Everyone our current character dueled: { { name, class, spec, wins, losses, last }, ... },
--- most duels first, then the latest fought; spec from the latest duel
+-- The opponent's rating after an Elo duel that counts (not disputed), else nil
+local function RatingAfter(duel)
+	if duel.eloChange and not duel.disputed then
+		return duel.oppElo - duel.eloChange
+	end
+end
+
+-- Everyone our current character dueled: { { name, class, spec, wins, losses, last,
+-- rating }, ... }, most duels first, then the latest fought; spec from the latest duel.
+-- rating is theirs as last heard: after our latest Elo duel or from a newer swap with
+-- them as a duelist; nil when we never heard one.
 function ns.GetOpponents()
 	local byName = {}
 	local list = {}
@@ -120,6 +132,17 @@ function ns.GetOpponents()
 			opponent.wins = opponent.wins + 1
 		else
 			opponent.losses = opponent.losses + 1
+		end
+		-- Newest first: the first Elo duel that counts has their latest rating
+		if not opponent.rating and RatingAfter(duel) then
+			opponent.rating, opponent.ratingT = RatingAfter(duel), duel.t
+		end
+	end
+	local duelists = ns.GetDB().duelists
+	for _, opponent in ipairs(list) do
+		local duelist = duelists[ns.FindDuelist(opponent.name) or ""]
+		if duelist and duelist.rating and (duelist.ratingT or 0) > (opponent.ratingT or 0) then
+			opponent.rating = duelist.rating
 		end
 	end
 	table.sort(list, function(a, b)
@@ -216,8 +239,8 @@ function ns.GetDuelists()
 			duelist.class = duelist.class or duel.oppClass
 			-- Newest first: the first Elo duel tells their rating after it, unless they
 			-- told us a newer one. Disputed duels count neither way.
-			if duel.eloChange and not duel.disputed and duel.t > duelist.ratingT then
-				duelist.rating, duelist.ratingT = duel.oppElo - duel.eloChange, duel.t
+			if RatingAfter(duel) and duel.t > duelist.ratingT then
+				duelist.rating, duelist.ratingT = RatingAfter(duel), duel.t
 			end
 			if duel.elo and not duel.disputed then
 				if duel.won then
@@ -261,6 +284,101 @@ function ns.GetMyRating()
 		end
 	end
 	return rating, games
+end
+
+---------------------------------------------------------------------------
+-- Rank badges: the PvP rank badges 1-14 by rating
+---------------------------------------------------------------------------
+
+local RANK_NAMES = {
+	Alliance = { "Private", "Corporal", "Sergeant", "Master Sergeant", "Sergeant Major", "Knight",
+		"Knight-Lieutenant", "Knight-Captain", "Knight-Champion", "Lieutenant Commander", "Commander",
+		"Marshal", "Field Marshal", "Grand Marshal" },
+	Horde = { "Scout", "Grunt", "Sergeant", "Senior Sergeant", "First Sergeant", "Stone Guard",
+		"Blood Guard", "Legionnaire", "Centurion", "Champion", "Lieutenant General", "General",
+		"Warlord", "High Warlord" },
+}
+
+-- The lowest rating of each rank, rankFrom[2] .. rankFrom[ns.RANKS], spread evenly so
+-- that rank 2 starts at min and the top rank at max
+function ns.EvenRankThresholds(min, max)
+	local from = {}
+	local step = (max - min) / (ns.RANKS - 2)
+	for rank = 2, ns.RANKS do
+		from[rank] = math.ceil(min + (rank - 2) * step)
+	end
+	return from
+end
+
+-- The lowest rating of each rank 2 .. ns.RANKS (rank 1 is everything below rank 2): as
+-- set on the Config tab, else spread evenly between ns.RANK_MIN and ns.RANK_MAX
+function ns.GetRankThresholds()
+	return ns.GetDB().settings.rankFrom or ns.EvenRankThresholds(ns.RANK_MIN, ns.RANK_MAX)
+end
+
+-- nil when every rank starts above the one before it, else the first rank that doesn't
+-- (or has no number). Each rank ends where the next starts, so ranges can't overlap.
+function ns.CheckRankThresholds(from)
+	for rank = 2, ns.RANKS do
+		if type(from[rank]) ~= "number" or (rank > 2 and from[rank] <= from[rank - 1]) then
+			return rank
+		end
+	end
+end
+
+-- Saves the lowest rating of each rank; nil goes back to the defaults. false when they
+-- don't go up rank by rank.
+function ns.SetRankThresholds(from)
+	if from and ns.CheckRankThresholds(from) then
+		return false
+	end
+	local saved
+	if from then
+		saved = {}
+		for rank = 2, ns.RANKS do
+			saved[rank] = from[rank]
+		end
+	end
+	ns.GetDB().settings.rankFrom = saved
+	ns.NotifyChanged()
+	return true
+end
+
+function ns.GetRank(rating)
+	local from = ns.GetRankThresholds()
+	for rank = ns.RANKS, 2, -1 do
+		if rating >= from[rank] then
+			return rank
+		end
+	end
+	return 1
+end
+
+-- Lowest and highest whole rating of a rank; nil for the open end
+function ns.GetRankRange(rank)
+	local from = ns.GetRankThresholds()
+	if rank == 1 then
+		return nil, from[2] - 1
+	elseif rank == ns.RANKS then
+		return from[rank], nil
+	end
+	return from[rank], from[rank + 1] - 1
+end
+
+function ns.GetRankIcon(rank)
+	return ("Interface\\PvPRankBadges\\PvPRank%02d"):format(rank)
+end
+
+-- The rank's name for our faction
+function ns.GetRankName(rank)
+	local names = RANK_NAMES[UnitFactionGroup("player")] or RANK_NAMES.Alliance
+	return names[rank]
+end
+
+-- "[badge] 1546": a rating with its rank badge; size is the badge's size
+function ns.RatingText(rating, size)
+	size = size or 16
+	return ("|T%s:%d:%d|t %d"):format(ns.GetRankIcon(ns.GetRank(rating)), size, size, rating)
 end
 
 -- Remembers a duelist's rating as they told it

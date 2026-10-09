@@ -7,7 +7,7 @@ local Book = ns.Book
 -- the swords challenge them to an Elo duel, the x removes them.
 local ROW_HEIGHT = 24
 local CONTENT_X = Book.CONTENT_X
-local COL_WIDTH = 60
+local COL_WIDTH = 70 -- ratings carry a rank badge
 local BUTTON_SIZE = 18
 local ACTIONS_WIDTH = 2 * BUTTON_SIZE + 20 -- challenge and remove buttons right of the rows
 
@@ -126,7 +126,7 @@ local function RefreshSummary()
 		end
 	end
 	local rating, games = ns.GetMyRating()
-	ratingLine:SetText(("Your rating: %d"):format(rating))
+	ratingLine:SetText(("Your rating: %s  %s"):format(ns.RatingText(rating, 20), ns.GetRankName(ns.GetRank(rating))))
 	local total = wins + losses
 	if total == 0 then
 		summary:SetText("No Elo duels yet.")
@@ -331,7 +331,7 @@ local function RefreshList()
 			row.remove:SetShown(not duelist.isMe)
 			row.won:SetText(duelist.wins)
 			row.lost:SetText(duelist.losses)
-			row.rating:SetText(duelist.rating or "-")
+			row.rating:SetText(duelist.rating and ns.RatingText(duelist.rating) or "-")
 			local waiting = ns.GetOutgoingChallenge()
 			row.challenge:SetEnabled(not waiting)
 			row.challenge:GetNormalTexture():SetDesaturated(waiting and true or false)

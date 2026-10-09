@@ -400,7 +400,7 @@ local function GetRow(i)
 	row.name:SetWordWrap(false)
 
 	row:SetScript("OnClick", function(self)
-		if ns.HasLog(self.duel) then
+		if ns.ShowsLog(self.duel) then
 			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
 			ns.ShowDuelLog(self.duel)
 		end
@@ -421,7 +421,7 @@ local function GetRow(i)
 		else
 			GameTooltip:AddLine("No health recorded.", 0.7, 0.7, 0.7)
 		end
-		if ns.HasLog(duel) then
+		if ns.ShowsLog(duel) then
 			GameTooltip:AddLine("Click to open its log.", 0.7, 0.7, 0.7)
 		end
 		GameTooltip:Show()
@@ -447,9 +447,9 @@ local function FillRow(row, duel)
 	row.result:SetText(result)
 	-- A scroll before the length when the duel has a log
 	local length = ns.FormatDuration(duel.dur)
-	row.length:SetText(ns.HasLog(duel) and ("|T%s:14:14|t %s"):format(ns.LOG_ICON, length) or length)
+	row.length:SetText(ns.ShowsLog(duel) and ("|T%s:14:14|t %s"):format(ns.LOG_ICON, length) or length)
 	-- Only logged duels can be clicked
-	row.highlight:SetShown(ns.HasLog(duel))
+	row.highlight:SetShown(ns.ShowsLog(duel))
 end
 
 ---------------------------------------------------------------------------
@@ -485,7 +485,7 @@ function Refresh()
 	end
 	empty:SetShown(#list == 0)
 	empty:SetText(#ns.GetDuels() == 0 and "No duels yet." or "No duels match the filters.")
-	hint:SetShown(#list > 0)
+	hint:SetShown(#list > 0 and ns.IsCombatLogEnabled())
 end
 
 panel.Refresh = Refresh

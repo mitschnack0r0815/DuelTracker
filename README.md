@@ -13,8 +13,8 @@ toward a rating.
   result, how it ended, class, spec, time and Elo.
 - **Opponents**: your overall record, recent duels and your wins and losses against
   each player.
-- **Duel log**: health at the start and end, how one-sided the fight was and, when
-  enabled, the combat log written to the game's `Logs` folder during duels.
+- **Extended logging** (Config tab, off by default): writes the game's combat log file
+  during duels and shows the Log tab with each logged duel in detail.
 - **Duelists**: a friends list of players you play Elo duels with, shown as a ranking
   by rating that includes you.
 - **Elo duels**: challenge a duelist, they get an Accept/Decline popup, and the next
@@ -25,6 +25,8 @@ toward a rating.
 - **Rating sync**: targeting a duelist quietly swaps current ratings with them (at
   most every 5 minutes).
 - **Right-click menu**: add, challenge or remove duelists from Blizzard's player menus.
+- **Rank badges**: ratings show a PvP rank badge, by default from the lowest rank below
+  1000 to the highest from 2000 up. You can set where every rank starts on the Config tab.
 
 ## Trust
 

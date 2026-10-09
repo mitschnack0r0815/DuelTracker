@@ -3,14 +3,17 @@ local _, ns = ...
 -- Made-up duels to try the window with: /duels test adds some, /duels cleartest removes
 -- them. They're marked test = true and belong to the character that made them.
 -- Opponents with duelist = true go on the duelists list (marked test = true there too,
--- unless they were on it already) and their duels are confirmed Elo duels.
+-- unless they were on it already). Duels are mixed like real ones: against duelists
+-- mostly Elo duels and some normal ones; against former duelists (former = true) now
+-- and then an Elo duel from back when they were on the list; against everyone else
+-- only normal duels, so they have no rating.
 
 local OPPONENTS = {
 	{ name = "Grimbash", class = "WARRIOR", level = 60, duelist = true },
 	{ name = "Lunaria", class = "PRIEST", level = 58, duelist = true },
 	{ name = "Shadowstep", class = "ROGUE", level = 60, duelist = true },
 	{ name = "Frostbyte", class = "MAGE", level = 55 },
-	{ name = "Thornpaw", class = "DRUID", level = 60 },
+	{ name = "Thornpaw", class = "DRUID", level = 60, former = true },
 	{ name = "Holyhammer", class = "PALADIN", level = 47 },
 	{ name = "Boltzmann", class = "SHAMAN", level = 60 },
 }
@@ -162,13 +165,24 @@ function ns.AddTestData(count)
 				ends = { me = { hp = health[1], max = MAX_HEALTH }, opp = { hp = health[2], max = MAX_HEALTH } },
 			},
 		}
-		-- Elo duels against duelists, both sides agreeing on the result
+		-- Elo duels, both sides agreeing on the result
+		local percent = 0
 		if opponent.duelist or ns.IsDuelist(duels[i].opp) then
+			percent = ns.TEST_ELO_PERCENT
+		elseif opponent.former then
+			percent = ns.TEST_FORMER_ELO_PERCENT
+		end
+		if math.random(100) <= percent then
 			duels[i].elo = true
 			duels[i].peer = ns.VERSION
 			duels[i].confirmed = true
 		end
 		duels[i].disputed = duels[i].peer and not duels[i].confirmed or nil
+		-- Most players don't switch the combat log on: only some duels have one, the rest
+		-- just the result, length and health
+		if math.random(100) > ns.TEST_LOG_PERCENT then
+			duels[i].sum, duels[i].log = nil, nil
+		end
 	end
 	-- Oldest first, like real duels, then through AddDuel so old logs get dropped
 	table.sort(duels, function(a, b)

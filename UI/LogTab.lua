@@ -1,10 +1,10 @@
 local _, ns = ...
 local Book = ns.Book
 
--- Log tab. Left page: the last ns.KEEP_LOGS duels that have a log, as spellbook entries,
--- paged. Right page: the picked duel in depth, its totals for both
--- sides, top damage and its combat log; or, with the info button or while there are no
--- duels, how logging works.
+-- Log tab, only while extended logging is on (Config tab). Left page: the last
+-- ns.KEEP_LOGS duels that have a log, as spellbook entries, paged. Right page: the picked
+-- duel in depth, its totals for both sides, top damage and its combat log; or, with the
+-- info button or while there are no duels, how logging works.
 local ROW_HEIGHT = 20
 local CONTENT_X = Book.CONTENT_X
 local COL_WIDTH = 70
@@ -70,29 +70,6 @@ local pager = Book.CreatePager(left, function(delta)
 	Refresh()
 end)
 pager:EnableWheel(left)
-
--- Combat log file on or off, bottom left across from the pager
-local combatLogCheck = CreateFrame("CheckButton", nil, left, "UICheckButtonTemplate")
-combatLogCheck:SetSize(26, 26)
-combatLogCheck:SetPoint("BOTTOMLEFT", CONTENT_X - 4, 37)
-local combatLogLabel = Book.CreateText(left, Book.SMALL_FONT)
-combatLogLabel:SetPoint("LEFT", combatLogCheck, "RIGHT", 2, 1)
-combatLogLabel:SetText("Write the combat log file during duels")
-combatLogCheck:SetScript("OnShow", function(self)
-	self:SetChecked(ns.IsCombatLogEnabled())
-end)
-combatLogCheck:SetScript("OnClick", function(self)
-	ns.SetCombatLogEnabled(self:GetChecked())
-	PlaySound(self:GetChecked() and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
-end)
-combatLogCheck:SetScript("OnEnter", function(self)
-	GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
-	GameTooltip:AddLine("Combat log file")
-	GameTooltip:AddLine("Switches the game's combat log file on when a duel is asked for and off after it ends. "
-		.. "Off by default; the info button on the right explains more.", 1, 1, 1, true)
-	GameTooltip:Show()
-end)
-combatLogCheck:SetScript("OnLeave", GameTooltip_Hide)
 
 local entries = {}
 for i = 1, ENTRIES_PER_PAGE do
@@ -346,8 +323,8 @@ local LOGGING_INFO = table.concat({
 
 local COMBAT_LOG_INFO = table.concat({
 	"WoW doesn't let addons read the combat log while you play. The game can still write it to a file: "
-		.. "tick \"Write the combat log file during duels\" at the bottom left, and Duel Tracker switches "
-		.. "combat logging on when a duel is asked for, and off a few seconds after it ends. It's off by default. "
+		.. "with extended logging on (Config tab), Duel Tracker switches "
+		.. "combat logging on when a duel is asked for, and off a few seconds after it ends. "
 		.. "If you switched logging on yourself with /combatlog, it stays on.",
 	"",
 	"The file is in the Logs folder of your WoW installation, next to Interface and WTF: "
@@ -423,6 +400,9 @@ local function ShowElo(duel, oppName)
 	end
 	eloLine.text:SetText(text)
 	eloLine.icon:SetShown(duel.elo == true)
+	if duel.elo then
+		eloLine.icon:SetTexture(ns.GetDuelBadge(duel))
+	end
 	eloLine.background:SetShown(tint ~= nil)
 	if tint then
 		eloLine.background:SetColorTexture(tint:GetRGBA())
@@ -514,6 +494,9 @@ panel:SetScript("OnShow", Refresh)
 
 -- Opens the Log tab on that duel, on the page of the list that has it
 function ns.ShowDuelLog(duel)
+	if not ns.IsTabShown(tabIndex) then
+		return -- extended logging is off
+	end
 	selected = duel
 	showInfo = false
 	ns.ShowTab(tabIndex)
@@ -525,3 +508,15 @@ function ns.ShowDuelLog(duel)
 	end
 	Refresh()
 end
+
+-- Shown only while extended logging is on: when the saved settings are there (login),
+-- and whenever the setting changes on the Config tab
+function ns.OnExtendedLoggingChanged()
+	ns.SetTabShown(tabIndex, ns.IsCombatLogEnabled())
+end
+
+local loginFrame = CreateFrame("Frame")
+loginFrame:RegisterEvent("PLAYER_LOGIN")
+loginFrame:SetScript("OnEvent", ns.OnExtendedLoggingChanged)
+-- Hidden until then: the saved settings aren't loaded yet while the addon's files run
+ns.SetTabShown(tabIndex, false)

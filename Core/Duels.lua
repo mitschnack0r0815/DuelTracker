@@ -60,7 +60,7 @@ end
 -- Combat log file
 ---------------------------------------------------------------------------
 
--- Only when the setting is on (Log tab, off by default). Only switches it off when we
+-- Only when extended logging is on (Config tab, off by default). Only switches it off when we
 -- switched it on; DuelTrackerDB.logging remembers that across a reload in a duel.
 local function StartLogging()
 	if ns.IsCombatLogEnabled() and not ns.GetDB().logging and not LoggingCombat() then
@@ -85,6 +85,9 @@ function ns.SetCombatLogEnabled(enabled)
 	ns.GetDB().settings.combatLog = enabled or nil
 	if not enabled then
 		StopLogging()
+	end
+	if ns.OnExtendedLoggingChanged then
+		ns.OnExtendedLoggingChanged()
 	end
 end
 

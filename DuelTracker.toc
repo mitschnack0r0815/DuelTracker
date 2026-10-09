@@ -20,8 +20,10 @@ UI\Book.lua
 UI\Window.lua
 UI\OpponentsTab.lua
 UI\DuelsTab.lua
-UI\LogTab.lua
 UI\DuelistsTab.lua
+UI\LogTab.lua
+UI\ConfigTab.lua
+UI\TestTab.lua
 UI\UnitMenu.lua
 UI\MinimapButton.lua
 
