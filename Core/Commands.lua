@@ -27,7 +27,7 @@ SlashCmdList["DUELTRACKER"] = function(msg)
 		end
 		local added, fullName = ns.AddDuelist(name, class)
 		if added then
-			print(("Duel Tracker: %s is now one of your duelists, your duels count for Elo."):format(ns.InkName(fullName)))
+			print(("Duel Tracker: %s is now one of your duelists."):format(ns.InkName(fullName)))
 		else
 			print("Duel Tracker: /duels add <name>, or target a player.")
 		end

@@ -215,11 +215,11 @@ function ns.GetDuelists()
 		if duelist then
 			duelist.class = duelist.class or duel.oppClass
 			-- Newest first: the first Elo duel tells their rating after it, unless they
-			-- told us a newer one
-			if duel.eloChange and duel.t > duelist.ratingT then
+			-- told us a newer one. Disputed duels count neither way.
+			if duel.eloChange and not duel.disputed and duel.t > duelist.ratingT then
 				duelist.rating, duelist.ratingT = duel.oppElo - duel.eloChange, duel.t
 			end
-			if duel.elo then
+			if duel.elo and not duel.disputed then
 				if duel.won then
 					duelist.wins = duelist.wins + 1
 				else
@@ -241,8 +241,14 @@ end
 -- How much our rating moves in a duel between these two ratings (theirs moves the other
 -- way by the same amount, so both sides get the same numbers)
 function ns.EloChange(mine, theirs, won)
-	local expected = 1 / (1 + 10 ^ ((theirs - mine) / 400))
-	return math.floor(ns.ELO_K * ((won and 1 or 0) - expected) + 0.5)
+	-- Always rounded from the winner's side, so both addons get exactly the same number
+	local winner, loser = mine, theirs
+	if not won then
+		winner, loser = theirs, mine
+	end
+	local expected = 1 / (1 + 10 ^ ((loser - winner) / 400))
+	local gain = math.floor(ns.ELO_K * (1 - expected) + 0.5)
+	return won and gain or -gain
 end
 
 -- Our current character's rating and how many Elo duels it's made of
@@ -259,7 +265,8 @@ end
 
 -- Remembers a duelist's rating as they told it
 function ns.SetDuelistRating(name, rating)
-	local duelist = ns.GetDB().duelists[name]
+	local key = ns.FindDuelist(name) -- the game's spelling may differ from the list's
+	local duelist = key and ns.GetDB().duelists[key]
 	if duelist and rating then
 		duelist.rating, duelist.ratingT = rating, GetServerTime()
 	end

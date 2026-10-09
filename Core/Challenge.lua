@@ -11,8 +11,8 @@ local _, ns = ...
 --                                   challenge is open
 -- No WAIT or DECLINE at all: they don't have Duel Tracker, or are offline.
 -- After an accept either of the two asks for the duel the usual way; the next duel
--- between them that starts within ns.CHALLENGE_START_SECONDS (Duels.lua takes the
--- agreement) is an Elo duel.
+-- between them asked for within ns.CHALLENGE_START_SECONDS is an Elo duel. A declined
+-- duel request doesn't use the agreement up, a fought duel does (Duels.lua).
 
 local POPUP = "DUELTRACKER_ELO_CHALLENGE"
 
@@ -20,7 +20,7 @@ local outgoing -- { opp, answered }, our challenge waiting for an answer
 local agreements = {} -- [full name] = { untilTime = GetTime(), rating = theirs }
 
 local function Name(name)
-	local duelist = ns.GetDB().duelists[name]
+	local duelist = ns.GetDB().duelists[ns.FindDuelist(name) or name]
 	return ns.ColorName(name, duelist and duelist.class)
 end
 
@@ -30,21 +30,25 @@ local function ReadRating(field)
 	return rating and math.floor(rating) or ns.ELO_START
 end
 
+-- name is the game's spelling (like the duel's opponent), not necessarily the list's
 local function Agree(name, rating)
 	ns.SetDuelistRating(name, rating)
-	if not ns.MarkCurrentElo(name, rating) then -- else the duel was asked for already
-		agreements[name] = { untilTime = GetTime() + ns.CHALLENGE_START_SECONDS, rating = rating }
-	end
+	agreements[name] = { untilTime = GetTime() + ns.CHALLENGE_START_SECONDS, rating = rating }
+	ns.MarkCurrentElo(name, rating) -- the duel may have been asked for already
 end
 
--- Their rating when we agreed on an Elo duel with name a short while ago, else nil;
--- uses the agreement up
-function ns.TakeEloAgreement(name)
+-- Their rating when we agreed on an Elo duel with name a short while ago, else nil.
+-- Stays valid when a duel request is declined, until ns.EndEloAgreement after a duel.
+function ns.GetEloAgreement(name)
 	local agreement = agreements[name]
-	agreements[name] = nil
 	if agreement and GetTime() <= agreement.untilTime then
 		return agreement.rating
 	end
+end
+
+-- An Elo duel with name was fought: the agreement is used up
+function ns.EndEloAgreement(name)
+	agreements[name] = nil
 end
 
 -- Full name of the player we challenged and wait for, if any
@@ -124,7 +128,8 @@ ns.OnMessage("CHALLENGE", function(sender, fields)
 	else
 		local rating = ReadRating(fields[1])
 		ns.Send(sender, "WAIT")
-		StaticPopup_Show(POPUP, ("%s (%d)"):format(Name(name), rating), nil, { name = name, rating = rating })
+		-- The sender's spelling: the duel is recorded under the game's spelling too
+		StaticPopup_Show(POPUP, ("%s (%d)"):format(Name(sender), rating), nil, { name = sender, rating = rating })
 		PlaySound(SOUNDKIT.READY_CHECK)
 	end
 end)

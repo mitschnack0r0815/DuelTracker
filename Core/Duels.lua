@@ -197,7 +197,7 @@ local function Begin(name, guid)
 		LearnFromUnit(unit)
 	end
 	current.peer = ns.GetPeerVersion(current.opp)
-	current.oppElo = ns.TakeEloAgreement(current.opp)
+	current.oppElo = ns.GetEloAgreement(current.opp)
 	current.elo = current.oppElo and true or nil
 	ns.SendHello(current.opp)
 	StartLogging()
@@ -325,6 +325,9 @@ local function Finish(winner, loser, how)
 	end
 	duel.peer = duel.peer or ns.GetPeerVersion(opp)
 	duel.elo = fight and fight.elo or nil
+	if duel.elo then
+		ns.EndEloAgreement(opp)
+	end
 	if duel.elo and fight.oppElo then
 		duel.myElo = (ns.GetMyRating())
 		duel.oppElo = fight.oppElo
