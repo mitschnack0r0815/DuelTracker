@@ -2,11 +2,13 @@ local _, ns = ...
 
 -- Made-up duels to try the window with: /duels test adds some, /duels cleartest removes
 -- them. They're marked test = true and belong to the character that made them.
+-- Opponents with duelist = true go on the duelists list (marked test = true there too,
+-- unless they were on it already) and their duels are confirmed Elo duels.
 
 local OPPONENTS = {
-	{ name = "Grimbash", class = "WARRIOR", level = 60 },
-	{ name = "Lunaria", class = "PRIEST", level = 58 },
-	{ name = "Shadowstep", class = "ROGUE", level = 60 },
+	{ name = "Grimbash", class = "WARRIOR", level = 60, duelist = true },
+	{ name = "Lunaria", class = "PRIEST", level = 58, duelist = true },
+	{ name = "Shadowstep", class = "ROGUE", level = 60, duelist = true },
 	{ name = "Frostbyte", class = "MAGE", level = 55 },
 	{ name = "Thornpaw", class = "DRUID", level = 60 },
 	{ name = "Holyhammer", class = "PALADIN", level = 47 },
@@ -114,7 +116,19 @@ local function MakeFight(myClass, oppClass, won, how)
 	return sum, log, t, { math.max(1, health[1]), math.max(1, health[2]) }
 end
 
+-- Puts the test duelists on the list; ones already there stay real
+local function AddTestDuelists()
+	local duelists = ns.GetDB().duelists
+	for _, opponent in ipairs(OPPONENTS) do
+		local name = ns.FullName(opponent.name)
+		if opponent.duelist and not duelists[name] then
+			duelists[name] = { added = GetServerTime(), class = opponent.class, test = true }
+		end
+	end
+end
+
 function ns.AddTestData(count)
+	AddTestDuelists()
 	local me = ns.GetMyName()
 	local myClass = select(2, UnitClass("player"))
 	local now = GetServerTime()
@@ -148,18 +162,36 @@ function ns.AddTestData(count)
 				ends = { me = { hp = health[1], max = MAX_HEALTH }, opp = { hp = health[2], max = MAX_HEALTH } },
 			},
 		}
-		duels[i].disputed = peer and not duels[i].confirmed or nil
+		-- Elo duels against duelists, both sides agreeing on the result
+		if opponent.duelist or ns.IsDuelist(duels[i].opp) then
+			duels[i].elo = true
+			duels[i].peer = ns.VERSION
+			duels[i].confirmed = true
+		end
+		duels[i].disputed = duels[i].peer and not duels[i].confirmed or nil
 	end
 	-- Oldest first, like real duels, then through AddDuel so old logs get dropped
 	table.sort(duels, function(a, b)
 		return a.t < b.t
 	end)
+	-- Elo in that order, the duelists starting somewhere around the default rating
+	local mine = ns.GetMyRating()
+	local theirs = {}
+	for _, duel in ipairs(duels) do
+		if duel.elo then
+			theirs[duel.opp] = theirs[duel.opp] or ns.ELO_START + math.random(-150, 150)
+			duel.myElo, duel.oppElo = mine, theirs[duel.opp]
+			duel.eloChange = ns.EloChange(mine, theirs[duel.opp], duel.won)
+			mine = mine + duel.eloChange
+			theirs[duel.opp] = theirs[duel.opp] - duel.eloChange
+		end
+	end
 	for _, duel in ipairs(duels) do
 		ns.AddDuel(duel)
 	end
 end
 
--- Returns how many were removed
+-- Also takes the test duelists off the list. Returns how many duels were removed
 function ns.ClearTestData()
 	local duels = ns.GetDB().duels
 	local removed = 0
@@ -167,6 +199,12 @@ function ns.ClearTestData()
 		if duels[i].test then
 			table.remove(duels, i)
 			removed = removed + 1
+		end
+	end
+	local duelists = ns.GetDB().duelists
+	for name, duelist in pairs(duelists) do
+		if duelist.test then
+			duelists[name] = nil
 		end
 	end
 	ns.NotifyChanged()

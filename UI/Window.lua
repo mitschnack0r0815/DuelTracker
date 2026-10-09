@@ -6,7 +6,7 @@ local Book = ns.Book
 -- tab's two pages.
 local window = CreateFrame("Frame", "DuelTrackerMainFrame", UIParent,
 	Book.TemplateExists("PortraitFrameTemplate") and "PortraitFrameTemplate" or "BasicFrameTemplate")
-local WIDTH, HEIGHT = 1060, 760
+local WIDTH, HEIGHT = 1260, 760
 window:SetSize(WIDTH, HEIGHT)
 window:SetPoint("TOP", UIParent, "TOP", 0, -60)
 window:SetFrameStrata("HIGH")
@@ -20,10 +20,18 @@ window:SetScript("OnDragStop", window.StopMovingOrSizing)
 window:Hide()
 tinsert(UISpecialFrames, "DuelTrackerMainFrame") -- close with Escape
 
-if window.SetTitle then
-	window:SetTitle("Duel Tracker")
-elseif window.TitleText then
-	window.TitleText:SetText("Duel Tracker")
+-- Title with "(alpha 0.1)" behind it in smaller grey; "alpha" until the first proper
+-- release, the number is the TOC's Version
+local VERSION_TEXT = ("(alpha %s)"):format(ns.VERSION)
+local titleText = window.TitleContainer and window.TitleContainer.TitleText or window.TitleText
+if titleText then
+	titleText:SetText("Duel Tracker")
+	-- The title is centered: the version starts right where its text ends
+	local version = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	version:SetPoint("LEFT", titleText, "CENTER", titleText:GetStringWidth() / 2 + 5, 0)
+	version:SetText(VERSION_TEXT)
+elseif window.SetTitle then
+	window:SetTitle("Duel Tracker " .. VERSION_TEXT)
 end
 if window.SetPortraitToAsset then
 	window:SetPortraitToAsset(ns.ICON)
@@ -33,6 +41,13 @@ local book = CreateFrame("Frame", nil, window)
 book:SetPoint("TOPLEFT", 2, -21)
 book:SetPoint("BOTTOMRIGHT", -2, 2)
 Book.CreateBookArt(book)
+
+-- Credit in the bottom right corner, below the right page's pager
+local credit = Book.CreateText(book, "GameFontNormalSmall")
+credit:SetPoint("BOTTOMRIGHT", -Book.PAGE_MARGIN, 14)
+credit:SetJustifyH("RIGHT")
+credit:SetAlpha(0.6)
+credit:SetText(("made by mitschnack0r, alpha v%s"):format(ns.VERSION))
 
 -- Test data buttons in the top bar, like /duels test and /duels cleartest
 local clearTestButton = CreateFrame("Button", nil, book, "UIPanelButtonTemplate")
@@ -89,6 +104,35 @@ Book.BOLD_NAME_FONT = BoldFont("DuelTrackerBoldNameFont", Book.NAME_FONT)
 -- parchment, the spec or class icon next to the name shows the class.
 function ns.InkName(name)
 	return ns.FullName(ns.ShortName(name)) == ns.FullName(name) and ns.ShortName(name) or name
+end
+
+-- Elo badge and rating change of an Elo duel ("+14": green or red, faded when the duel
+-- was disputed and doesn't count); "" for other duels
+function ns.EloText(duel)
+	if not duel.elo then
+		return ""
+	end
+	local badge = ("|T%s:14:14|t"):format(ns.ELO_ICON)
+	if not duel.eloChange then
+		return badge
+	end
+	local color = duel.disputed and Book.MUTED or (duel.eloChange >= 0 and Book.GOOD or Book.BAD)
+	return ("%s%s%+d|r"):format(badge, color, duel.eloChange)
+end
+
+-- The opponent's name for duel lists; withElo adds the Elo badge and change behind it,
+-- for lists without an Elo column
+function ns.DuelName(duel, withElo)
+	local name = ns.InkName(duel.opp)
+	if withElo and duel.elo then
+		return name .. " " .. ns.EloText(duel)
+	end
+	return name
+end
+
+-- The spec's talent points "31/20/0", "" when the spec isn't known
+function ns.SpecText(spec)
+	return spec and spec.points or ""
 end
 
 -- Spec icon on a texture (the talent tree with the most points), the class icon when the

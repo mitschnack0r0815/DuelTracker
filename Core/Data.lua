@@ -19,6 +19,10 @@ local _, ns = ...
 --     peer      the opponent's Duel Tracker version, when they have it
 --     confirmed true when the opponent's Duel Tracker reported the same result,
 --     disputed  true when it reported a different one (both nil: no report)
+--     elo       true for an Elo duel: both sides agreed on it before (Challenge.lua)
+--     myElo, oppElo   both ratings before an Elo duel, as swapped when it was agreed on
+--     eloChange how much our rating moved (theirs moved the other way); missing on
+--               Elo duels from before ratings were swapped
 --     sum, log  only on test duels for now; later filled in from the combat log file
 --     sum       { [1] = our side, [2] = theirs }, side = { dmg, heal, hits, crits,
 --               spells = { [spell name] = damage } }
@@ -30,14 +34,19 @@ local _, ns = ...
 --   settings = { combatLog = true to write the combat log file during duels (off by default) }
 --   logging = true while we have the combat log file on (switched off again after a reload)
 --   minimap = { angle, hide }
+--   duelists = { ["Name-Realm"] = { added = server time, class, test, rating, ratingT } },
+--               the players we can challenge to Elo duels (when they have us on their
+--               list too). rating is theirs as last heard (ratingT, server time) from
+--               them. test = true when the test data put them there
 --
--- Wins and losses are counted from the duel list, so a future rating (like Elo) can be
--- computed from the same list; confirmed duels are the ones both sides agree on.
+-- Wins, losses and our Elo rating are counted from the duel list: the rating is
+-- ns.ELO_START plus the eloChange of every Elo duel the opponent didn't dispute.
 
 function ns.GetDB()
 	DuelTrackerDB = DuelTrackerDB or {}
 	DuelTrackerDB.duels = DuelTrackerDB.duels or {}
 	DuelTrackerDB.settings = DuelTrackerDB.settings or {}
+	DuelTrackerDB.duelists = DuelTrackerDB.duelists or {}
 	return DuelTrackerDB
 end
 
@@ -134,6 +143,126 @@ function ns.GetRecord(opp)
 		end
 	end
 	return wins, losses
+end
+
+---------------------------------------------------------------------------
+-- Duelists: the players we play Elo duels with
+---------------------------------------------------------------------------
+
+function ns.IsDuelist(name)
+	return name ~= nil and ns.GetDB().duelists[ns.FullName(name)] ~= nil
+end
+
+-- The list's spelling of name ("Name-Realm") when they're on it, in any case
+function ns.FindDuelist(name)
+	if not name then
+		return nil
+	end
+	local wanted = ns.FullName(name:trim()):lower()
+	for key in pairs(ns.GetDB().duelists) do
+		if key:lower() == wanted then
+			return key
+		end
+	end
+end
+
+-- "name" or "Name-Realm"; capitalized like the game does. false when it's us or no name.
+function ns.AddDuelist(name, class)
+	name = name and name:trim()
+	if not name or name == "" then
+		return false
+	end
+	local short, realm = name:match("^([^%-]+)(.*)$") -- the realm keeps its spelling
+	if not short then
+		return false
+	end
+	name = ns.FullName(short:sub(1, 1):upper() .. short:sub(2):lower() .. realm)
+	if ns.SameName(name, ns.GetMyName()) then
+		return false
+	end
+	local duelists = ns.GetDB().duelists
+	duelists[name] = duelists[name] or { added = GetServerTime() }
+	duelists[name].class = class or duelists[name].class
+	duelists[name].test = nil -- added by hand: stays when the test data goes
+	ns.NotifyChanged()
+	return true, name
+end
+
+-- false when they weren't on the list
+function ns.RemoveDuelist(name)
+	local key = ns.FindDuelist(name) -- typed names may be spelled in any case
+	if not key then
+		return false
+	end
+	ns.GetDB().duelists[key] = nil
+	ns.NotifyChanged()
+	return true
+end
+
+-- { { name, class, added, wins, losses, rating }, ... } by name; wins and losses of our
+-- current character in Elo duels against them, their rating as last heard (nil: never)
+function ns.GetDuelists()
+	local list = {}
+	local byName = {}
+	for name, info in pairs(ns.GetDB().duelists) do
+		local duelist = { name = name, class = info.class, added = info.added, wins = 0, losses = 0,
+			rating = info.rating, ratingT = info.ratingT or 0 }
+		byName[name] = duelist
+		list[#list + 1] = duelist
+	end
+	for _, duel in ipairs(ns.GetDuels()) do
+		local duelist = byName[duel.opp]
+		if duelist then
+			duelist.class = duelist.class or duel.oppClass
+			-- Newest first: the first Elo duel tells their rating after it, unless they
+			-- told us a newer one
+			if duel.eloChange and duel.t > duelist.ratingT then
+				duelist.rating, duelist.ratingT = duel.oppElo - duel.eloChange, duel.t
+			end
+			if duel.elo then
+				if duel.won then
+					duelist.wins = duelist.wins + 1
+				else
+					duelist.losses = duelist.losses + 1
+				end
+			end
+		end
+	end
+	table.sort(list, function(a, b)
+		return a.name < b.name
+	end)
+	return list
+end
+
+---------------------------------------------------------------------------
+-- Elo
+---------------------------------------------------------------------------
+
+-- How much our rating moves in a duel between these two ratings (theirs moves the other
+-- way by the same amount, so both sides get the same numbers)
+function ns.EloChange(mine, theirs, won)
+	local expected = 1 / (1 + 10 ^ ((theirs - mine) / 400))
+	return math.floor(ns.ELO_K * ((won and 1 or 0) - expected) + 0.5)
+end
+
+-- Our current character's rating and how many Elo duels it's made of
+function ns.GetMyRating()
+	local rating, games = ns.ELO_START, 0
+	for _, duel in ipairs(ns.GetDuels()) do
+		if duel.eloChange and not duel.disputed then
+			rating = rating + duel.eloChange
+			games = games + 1
+		end
+	end
+	return rating, games
+end
+
+-- Remembers a duelist's rating as they told it
+function ns.SetDuelistRating(name, rating)
+	local duelist = ns.GetDB().duelists[name]
+	if duelist and rating then
+		duelist.rating, duelist.ratingT = rating, GetServerTime()
+	end
 end
 
 -- Name in its class color, without the realm when it's ours

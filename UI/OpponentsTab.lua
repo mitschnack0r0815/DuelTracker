@@ -49,7 +49,7 @@ end
 
 Book.CreateHeader(left, "Overview")
 local summary = Text(left, Book.TEXT_FONT, -100)
-local confirmedLine = Text(left, nil, -122)
+local eloLine = Text(left, nil, -122)
 
 -- Recent duels: one row each, green when won and red when lost, the opponent's spec or
 -- class icon and name, the date on the right. The latest ns.KEEP_LOGS duels, scrolled with
@@ -60,6 +60,9 @@ local RECENT_GAP = 2
 local RECENT_FIRST = RECENT_TOP - 40
 local RECENT_COUNT = floor((RECENT_FIRST - Book.CONTENT_BOTTOM) / (RECENT_ROW_HEIGHT + RECENT_GAP))
 local RECENT_SCROLL_STEP = 3
+local RECENT_WHEN_WIDTH = 96 -- "24.12. 18:30" on the right
+local RECENT_ELO_WIDTH = 56 -- Elo badge and rating change
+local RECENT_SPEC_WIDTH = 70 -- talent points
 -- Light tints, so the dark ink of the names stays readable on them
 local WON_COLOR = CreateColor(0.3, 0.6, 0.2, 0.22)
 local LOST_COLOR = CreateColor(0.7, 0.2, 0.15, 0.22)
@@ -104,21 +107,27 @@ for i = 1, RECENT_COUNT do
 	line.icon:SetSize(RECENT_ROW_HEIGHT - 4, RECENT_ROW_HEIGHT - 4)
 	line.icon:SetPoint("LEFT", 4, 0)
 
-	line.name = Book.CreateText(line, Book.BOLD_FONT)
-	line.name:SetPoint("LEFT", line.icon, "RIGHT", 6, 0)
-	line.name:SetWordWrap(false)
-
+	-- Columns from the right: date, talent points, Elo right after the name; the name
+	-- takes the rest
 	line.when = Book.CreateText(line, Book.SMALL_FONT)
 	line.when:SetPoint("RIGHT", -6, 0)
 	line.when:SetJustifyH("RIGHT")
 	line.when:SetAlpha(0.7)
 
-	-- Spec behind the name, in the lighter normal font
 	line.spec = Book.CreateText(line, Book.SMALL_FONT)
-	line.spec:SetPoint("LEFT", line.name, "RIGHT", 6, 0)
-	line.spec:SetPoint("RIGHT", line.when, "LEFT", -6, 0)
+	line.spec:SetPoint("RIGHT", -RECENT_WHEN_WIDTH, 0)
+	line.spec:SetWidth(RECENT_SPEC_WIDTH)
 	line.spec:SetWordWrap(false)
 	line.spec:SetAlpha(0.7)
+
+	line.elo = Book.CreateText(line, Book.SMALL_FONT)
+	line.elo:SetPoint("RIGHT", line.spec, "LEFT", -10, 0)
+	line.elo:SetWidth(RECENT_ELO_WIDTH)
+
+	line.name = Book.CreateText(line, Book.BOLD_FONT)
+	line.name:SetPoint("LEFT", line.icon, "RIGHT", 6, 0)
+	line.name:SetPoint("RIGHT", line.elo, "LEFT", -6, 0)
+	line.name:SetWordWrap(false)
 
 	recentLines[i] = line
 end
@@ -141,9 +150,9 @@ function RefreshRecent()
 			end
 			ns.SetDuelistIcon(line.icon, duel.oppClass, duel.oppSpec)
 			-- Plain ink: class colors are hard to read on the tint, the icon shows the class
-			line.name:SetText(ns.InkName(duel.opp))
-			local spec = duel.oppSpec
-			line.spec:SetText(spec and spec.name and ("(%s %s)"):format(spec.name, spec.points or "") or "")
+			line.name:SetText(ns.DuelName(duel))
+			line.spec:SetText(ns.SpecText(duel.oppSpec))
+			line.elo:SetText(ns.EloText(duel))
 			line.when:SetText(date("%d.%m. %H:%M", duel.t))
 		end
 	end
@@ -165,15 +174,12 @@ local function RefreshRecord()
 			total, Book.GOOD, wins, Book.BAD, losses, math.floor(wins / total * 100)))
 	end
 
-	local confirmed, withAddon = 0, 0
+	local elo = 0
 	for _, duel in ipairs(duels) do
-		if duel.peer then
-			withAddon = withAddon + 1
-			confirmed = confirmed + (duel.confirmed and 1 or 0)
-		end
+		elo = elo + (duel.elo and 1 or 0)
 	end
-	confirmedLine:SetText(("%d of %d duels confirmed by the opponent's Duel Tracker"):format(confirmed, withAddon))
-	confirmedLine:SetShown(withAddon > 0)
+	eloLine:SetText(("%d of them Elo duels"):format(elo))
+	eloLine:SetShown(total > 0)
 
 	recent = {}
 	for i = 1, math.min(#duels, ns.KEEP_LOGS) do

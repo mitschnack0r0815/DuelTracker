@@ -2,12 +2,17 @@ local _, ns = ...
 local Book = ns.Book
 
 -- Duels tab: every duel of this character. Left page: filters (opponent, result, how it
--- ended, class, time, confirmed) and the record of the duels they let through. Right
+-- ended, class, time, Elo or not) and the record of the duels they let through. Right
 -- page: those duels as a paged table, newest first; a logged duel opens on the Log tab.
 -- Clicking a name on the Opponents tab opens this tab filtered to that player.
 local ROW_HEIGHT = 22
 local CONTENT_X = Book.CONTENT_X
-local COL_WIDTH = 70
+-- Table columns after the opponent's name: result with the Elo badge and change, talent
+-- points, length on the right
+local RESULT_WIDTH = 130
+local SPEC_WIDTH = 70
+local LENGTH_WIDTH = 64
+local COL_GAP = 8
 local FORM_TOP = -100
 local FORM_ROW_HEIGHT = 34
 local FORM_LABEL_WIDTH = 90
@@ -29,7 +34,7 @@ local filters = {
 	class = nil, -- class file name
 	spec = nil, -- spec name of that class, or UNKNOWN_SPEC for duels without one
 	days = nil, -- only duels of the last this many days
-	confirmed = nil, -- "yes" or "no"
+	elo = nil, -- true: only Elo duels
 }
 local page = 1
 local Refresh
@@ -37,15 +42,6 @@ local Refresh
 local function Text(page, font, y, x)
 	local text = Book.CreateText(page, font or Book.SMALL_FONT)
 	text:SetPoint("TOPLEFT", x or CONTENT_X, y)
-	return text
-end
-
--- Right-aligned number column; col 1 is the rightmost
-local function Number(page, font, y, col)
-	local text = Book.CreateText(page, font or Book.SMALL_FONT)
-	text:SetWidth(COL_WIDTH)
-	text:SetJustifyH("RIGHT")
-	text:SetPoint("TOPRIGHT", -Book.PAGE_MARGIN - (col - 1) * COL_WIDTH, y)
 	return text
 end
 
@@ -78,7 +74,7 @@ local function Matches(duel)
 	if filters.days and duel.t < GetServerTime() - filters.days * DAY then
 		return false
 	end
-	if filters.confirmed and (filters.confirmed == "yes") ~= (duel.confirmed == true) then
+	if filters.elo and not duel.elo then
 		return false
 	end
 	return true
@@ -172,9 +168,6 @@ local DAYS_CHOICES = {
 	{ text = "Any time" }, { text = "Today", value = 1 }, { text = "Last 7 days", value = 7 },
 	{ text = "Last 30 days", value = 30 }, { text = "Last 90 days", value = 90 },
 }
-local CONFIRMED_CHOICES = {
-	{ text = "Confirmed or not" }, { text = "Confirmed", value = "yes" }, { text = "Not confirmed", value = "no" },
-}
 
 -- Classes of the players dueled, plus the one filtered for
 local function GetClassChoices()
@@ -240,9 +233,26 @@ local menuButtons = {
 	MenuFilter("Class", "class", GetClassChoices),
 	MenuFilter("Spec", "spec", GetSpecChoices),
 	MenuFilter("Time", "days", function() return DAYS_CHOICES end),
-	MenuFilter("Confirmed", "confirmed", function() return CONFIRMED_CHOICES end),
 }
 local specButton = menuButtons[4]
+
+-- Elo: a checkbox, it's either only Elo duels or all of them
+local eloCheck = CreateFrame("CheckButton", nil, CreateFormRow("Elo"), "UICheckButtonTemplate")
+eloCheck:SetSize(26, 26)
+eloCheck:SetPoint("LEFT", FORM_LABEL_WIDTH - 2, 0)
+local eloLabel = Book.CreateText(eloCheck, Book.SMALL_FONT)
+eloLabel:SetPoint("LEFT", eloCheck, "RIGHT", 2, 1)
+eloLabel:SetText("Only Elo duels")
+eloCheck:SetScript("OnClick", function(self)
+	PlaySound(self:GetChecked() and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+	filters.elo = self:GetChecked() or nil
+	page = 1
+	Refresh()
+end)
+function eloCheck:Update()
+	self:SetChecked(filters.elo == true)
+end
+menuButtons[#menuButtons + 1] = eloCheck -- updated with the menu buttons
 
 -- Greyed out until a class is picked
 local updateSpec = specButton.Update
@@ -309,8 +319,20 @@ local tableHeader = Book.CreateHeader(right)
 
 Text(right, nil, TABLE_TOP):SetText("Date")
 Text(right, nil, TABLE_TOP, CONTENT_X + 84):SetText("Opponent")
-Number(right, nil, TABLE_TOP, 2):SetText("Result")
-Number(right, nil, TABLE_TOP, 1):SetText("Length")
+-- Lined up with the row columns below (the rows end at the page margin)
+local lengthHeader = Book.CreateText(right, Book.SMALL_FONT)
+lengthHeader:SetWidth(LENGTH_WIDTH)
+lengthHeader:SetJustifyH("RIGHT")
+lengthHeader:SetPoint("TOPRIGHT", -Book.PAGE_MARGIN, TABLE_TOP)
+lengthHeader:SetText("Length")
+local specHeader = Book.CreateText(right, Book.SMALL_FONT)
+specHeader:SetWidth(SPEC_WIDTH)
+specHeader:SetPoint("TOPRIGHT", lengthHeader, "TOPLEFT", -COL_GAP, 0)
+specHeader:SetText("Spec")
+local resultHeader = Book.CreateText(right, Book.SMALL_FONT)
+resultHeader:SetWidth(RESULT_WIDTH)
+resultHeader:SetPoint("TOPRIGHT", specHeader, "TOPLEFT", -COL_GAP, 0)
+resultHeader:SetText("Result")
 
 local empty = Text(right, Book.TEXT_FONT, TABLE_TOP - ROW_HEIGHT - 4)
 empty:SetAlpha(0.7)
@@ -318,7 +340,7 @@ empty:SetAlpha(0.7)
 local hint = Book.CreateText(right, Book.SMALL_FONT)
 hint:SetPoint("BOTTOMLEFT", CONTENT_X, 44)
 hint:SetAlpha(0.7)
-hint:SetText("Click a logged duel to open its log.")
+hint:SetText(("Click a logged duel (|T%s:14:14|t) to open its log."):format(ns.LOG_ICON))
 
 local pager = Book.CreatePager(right, function(delta)
 	page = page + delta
@@ -357,22 +379,25 @@ local function GetRow(i)
 
 	row.length = Book.CreateText(row, Book.SMALL_FONT)
 	row.length:SetPoint("RIGHT", -6, 0)
-	row.length:SetWidth(COL_WIDTH - 6)
+	row.length:SetWidth(LENGTH_WIDTH)
 	row.length:SetJustifyH("RIGHT")
 
+	row.spec = Book.CreateText(row, Book.SMALL_FONT)
+	row.spec:SetPoint("RIGHT", row.length, "LEFT", -COL_GAP, 0)
+	row.spec:SetWidth(SPEC_WIDTH)
+	row.spec:SetWordWrap(false)
+	row.spec:SetAlpha(0.7)
+
+	-- Right after the name: "Won", then the Elo badge and change
 	row.result = Book.CreateText(row, Book.SMALL_FONT)
-	row.result:SetPoint("RIGHT", row.length, "LEFT")
-	row.result:SetWidth(COL_WIDTH)
-	row.result:SetJustifyH("RIGHT")
+	row.result:SetPoint("RIGHT", row.spec, "LEFT", -COL_GAP, 0)
+	row.result:SetWidth(RESULT_WIDTH)
+	row.result:SetWordWrap(false)
 
 	row.name = Book.CreateText(row, Book.BOLD_SMALL_FONT)
 	row.name:SetPoint("LEFT", row.icon, "RIGHT", 5, 0)
-
-	row.spec = Book.CreateText(row, Book.SMALL_FONT)
-	row.spec:SetPoint("LEFT", row.name, "RIGHT", 4, 0)
-	row.spec:SetPoint("RIGHT", row.result, "LEFT", -4, 0)
-	row.spec:SetWordWrap(false)
-	row.spec:SetAlpha(0.7)
+	row.name:SetPoint("RIGHT", row.result, "LEFT", -COL_GAP, 0)
+	row.name:SetWordWrap(false)
 
 	row:SetScript("OnClick", function(self)
 		if ns.HasLog(self.duel) then
@@ -384,7 +409,7 @@ local function GetRow(i)
 	row:SetScript("OnEnter", function(self)
 		local duel = self.duel
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:AddLine(ns.InkName(duel.opp))
+		GameTooltip:AddLine(ns.DuelName(duel, true))
 		local verdict, gap, color = ns.GetVerdict(duel)
 		if verdict then
 			GameTooltip:AddLine(("%s (%d%% apart at the end)"):format(verdict, math.floor(gap + 0.5)), color:GetRGB())
@@ -410,16 +435,19 @@ local function FillRow(row, duel)
 	row.duel = duel
 	row.when:SetText(date("%d.%m. %H:%M", duel.t))
 	ns.SetDuelistIcon(row.icon, duel.oppClass, duel.oppSpec)
-	row.name:SetText(ns.InkName(duel.opp))
-	local spec = duel.oppSpec
-	-- Only the points, the icon shows the spec; the full name would make the row too wide
-	row.spec:SetText(spec and spec.points and ("(%s)"):format(spec.points) or "")
+	row.name:SetText(ns.DuelName(duel))
+	row.spec:SetText(ns.SpecText(duel.oppSpec))
 	local result = duel.won and (Book.GOOD .. "Won|r") or (Book.BAD .. "Lost|r")
 	if duel.how == "fled" then
 		result = result .. ", fled"
 	end
+	if duel.elo then
+		result = result .. "  " .. ns.EloText(duel)
+	end
 	row.result:SetText(result)
-	row.length:SetText(ns.FormatDuration(duel.dur))
+	-- A scroll before the length when the duel has a log
+	local length = ns.FormatDuration(duel.dur)
+	row.length:SetText(ns.HasLog(duel) and ("|T%s:14:14|t %s"):format(ns.LOG_ICON, length) or length)
 	-- Only logged duels can be clicked
 	row.highlight:SetShown(ns.HasLog(duel))
 end

@@ -140,7 +140,7 @@ local function RefreshList()
 		entry:SetShown(duel ~= nil)
 		if duel then
 			ns.SetDuelistIcon(entry.icon, duel.oppClass, duel.oppSpec)
-			entry.name:SetText(ns.InkName(duel.opp))
+			entry.name:SetText(ns.DuelName(duel, true))
 			entry.sub:SetText(("%s, %s   %s   %s%s"):format(
 				duel.won and (Book.GOOD .. "Won|r") or (Book.BAD .. "Lost|r"),
 				ns.DescribeHow(duel), date("%d.%m. %H:%M", duel.t), ns.FormatDuration(duel.dur),
@@ -193,14 +193,31 @@ versus:SetPoint("LEFT", me.spec, "RIGHT", 8, 0)
 versus:SetText(Book.MUTED .. "vs|r")
 local them = Duelist(versus)
 
--- spec: "(Arms 31/20/0)", empty when the spec isn't known
+-- spec: "(31/20/0)", empty when the spec isn't known
 local function ShowDuelist(duelist, name, class, spec)
 	ns.SetDuelistIcon(duelist.icon, class, spec)
 	duelist.name:SetText(name)
-	duelist.spec:SetText(spec and spec.name and ("(%s %s)"):format(spec.name, spec.points or "") or "")
+	duelist.spec:SetText(spec and spec.points and ("(%s)"):format(spec.points) or "")
 end
 
-local confirmLine = Text(view, nil, -146)
+-- Elo band: a tinted strip with the Elo badge, bold ink so it reads on the parchment;
+-- a plain faded line for normal duels
+local eloLine = CreateFrame("Frame", nil, view)
+eloLine:SetPoint("TOPLEFT", CONTENT_X - 6, -143)
+eloLine:SetPoint("RIGHT", -Book.PAGE_MARGIN + 6, 0)
+eloLine:SetHeight(22)
+eloLine.background = eloLine:CreateTexture(nil, "BACKGROUND")
+eloLine.background:SetAllPoints()
+eloLine.icon = eloLine:CreateTexture(nil, "ARTWORK")
+eloLine.icon:SetSize(16, 16)
+eloLine.icon:SetPoint("LEFT", 6, 0)
+eloLine.icon:SetTexture(ns.ELO_ICON)
+eloLine.text = Book.CreateText(eloLine, Book.BOLD_SMALL_FONT)
+eloLine.text:SetPoint("LEFT", eloLine.icon, "RIGHT", 6, 0)
+eloLine.text:SetPoint("RIGHT", -6, 0)
+eloLine.text:SetWordWrap(false)
+local ELO_TINT = CreateColor(0.85, 0.65, 0.2, 0.3) -- gold
+local DISPUTED_TINT = CreateColor(0.7, 0.2, 0.15, 0.22)
 
 -- Health at the start and end, two lines
 local healthText = Text(view, nil, -170)
@@ -322,7 +339,7 @@ end
 
 local LOGGING_INFO = table.concat({
 	"Every duel you fight is recorded by itself: who won, how it ended, when, and against whom. "
-		.. "When your opponent has Duel Tracker too, both sides compare results and the duel counts as confirmed.",
+		.. "Challenge players on your Duelists tab to Elo duels; only duels you both agreed on count for Elo.",
 	"",
 	"To start, ask someone for a duel: right-click their portrait and pick Duel, or type /duel while you target them.",
 }, "\n")
@@ -388,15 +405,30 @@ infoButton:SetScript("OnLeave", GameTooltip_Hide)
 
 ---------------------------------------------------------------------------
 
-local function ConfirmText(duel, oppName)
-	if duel.confirmed then
-		return Book.GOOD .. oppName .. "'s Duel Tracker agrees on the result.|r"
+local function ShowElo(duel, oppName)
+	local text, tint
+	if not duel.elo then
+		text = Book.MUTED .. "Normal duel, doesn't count for Elo.|r"
 	elseif duel.disputed then
-		return Book.BAD .. oppName .. "'s Duel Tracker reported another result.|r"
-	elseif duel.peer then
-		return oppName .. " has Duel Tracker, no report from them yet."
+		text = ("Elo duel, but %s's Duel Tracker reported another result: doesn't count"):format(oppName)
+		tint = DISPUTED_TINT
+	elseif duel.eloChange then
+		-- "Elo duel    You 1532 vs 1510    +14"
+		text = ("Elo duel      You %d  vs  %d      %s%+d|r"):format(duel.myElo, duel.oppElo,
+			duel.eloChange >= 0 and Book.GOOD or Book.BAD, duel.eloChange)
+		tint = ELO_TINT
+	else
+		text = "Elo duel"
+		tint = ELO_TINT
 	end
-	return Book.MUTED .. oppName .. " doesn't seem to have Duel Tracker.|r"
+	eloLine.text:SetText(text)
+	eloLine.icon:SetShown(duel.elo == true)
+	eloLine.background:SetShown(tint ~= nil)
+	if tint then
+		eloLine.background:SetColorTexture(tint:GetRGBA())
+	end
+	-- Normal duels: no badge, the text starts where the badge would
+	eloLine.text:SetPoint("LEFT", eloLine.icon, duel.elo and "RIGHT" or "LEFT", duel.elo and 6 or 0, 0)
 end
 
 function ShowDuel(duel)
@@ -405,7 +437,7 @@ function ShowDuel(duel)
 	details:SetShown(hasDetails)
 	info:SetShown(duel ~= nil)
 	matchup:SetShown(duel ~= nil)
-	confirmLine:SetShown(duel ~= nil)
+	eloLine:SetShown(duel ~= nil)
 	healthText:SetShown(duel ~= nil)
 	if not duel then
 		duelHeader.Text:SetText("")
@@ -418,7 +450,7 @@ function ShowDuel(duel)
 	duelHeader.Text:SetText((duel.won and "Won against " or "Lost against ") .. oppName)
 	info:SetText(("%s, %s, %s fighting"):format(
 		date("%d.%m.%Y %H:%M", duel.t), ns.DescribeHow(duel), ns.FormatDuration(duel.dur)))
-	confirmLine:SetText(ConfirmText(duel, oppName))
+	ShowElo(duel, oppName)
 	local myHealth, oppHealth = ns.DescribeHealth(duel)
 	healthText:SetText(myHealth and (myHealth .. "\n" .. oppHealth) or (Book.MUTED .. "No health recorded.|r"))
 	local verdict, _, color = ns.GetVerdict(duel)
@@ -470,7 +502,7 @@ function Refresh()
 end
 
 function panel:Refresh()
-	-- Keep the log where it was scrolled to, say when a report confirms the shown duel
+	-- Keep the log where it was scrolled to, say when the opponent's report on the shown duel arrives
 	local shown, scroll = selected, log:GetScrollOffset()
 	Refresh()
 	if selected == shown then

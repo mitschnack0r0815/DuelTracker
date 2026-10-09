@@ -1,6 +1,8 @@
 local _, ns = ...
 
 ns.ICON = "Interface\\Icons\\Ability_DualWield" -- two swords
+ns.ELO_ICON = "Interface\\PvPRankBadges\\PvPRank06" -- badge behind the names in Elo duels
+ns.LOG_ICON = "Interface\\Icons\\INV_Scroll_03" -- before the length of duels with a log
 
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
 ns.VERSION = GetAddOnMetadata("DuelTracker", "Version") or "?"
@@ -48,3 +50,21 @@ ns.CANCEL_DELAY = 2
 
 -- The opponent's result report has to be at most this many seconds off our own
 ns.RESULT_MATCH_WINDOW = 120
+
+-- Elo duel challenges: seconds the challenged player has to answer, seconds to wait for
+-- their Duel Tracker to say it got the challenge at all, and seconds after accepting
+-- in which the next duel between the two has to be asked for to be an Elo duel
+ns.CHALLENGE_ANSWER_SECONDS = 60
+ns.CHALLENGE_REPLY_SECONDS = 5
+ns.CHALLENGE_START_SECONDS = 60
+
+-- Addon messages: how many may go out at once, then how many per second
+ns.SEND_BURST = 8
+ns.SEND_RATE = 1
+
+-- Elo ratings: everyone starts at ELO_START, ELO_K is how much one duel can move it
+ns.ELO_START = 1500
+ns.ELO_K = 32
+
+-- Targeting a duelist asks for their Elo rating, at most every this many seconds each
+ns.RATING_ASK_INTERVAL = 300

@@ -197,6 +197,8 @@ local function Begin(name, guid)
 		LearnFromUnit(unit)
 	end
 	current.peer = ns.GetPeerVersion(current.opp)
+	current.oppElo = ns.TakeEloAgreement(current.opp)
+	current.elo = current.oppElo and true or nil
 	ns.SendHello(current.opp)
 	StartLogging()
 	-- A request nobody answers may never finish: stop the file after a while
@@ -207,6 +209,16 @@ local function Begin(name, guid)
 			StopLogging()
 		end
 	end)
+end
+
+-- An Elo duel agreed on while the duel was already asked for (say the duel request went
+-- out before the accept); true when there was such a duel
+function ns.MarkCurrentElo(name, rating)
+	if current and current.opp == name then
+		current.elo, current.oppElo = true, rating
+		return true
+	end
+	return false
 end
 
 function ns.OnPeerHello(sender, version)
@@ -312,6 +324,12 @@ local function Finish(winner, loser, how)
 		end
 	end
 	duel.peer = duel.peer or ns.GetPeerVersion(opp)
+	duel.elo = fight and fight.elo or nil
+	if duel.elo and fight.oppElo then
+		duel.myElo = (ns.GetMyRating())
+		duel.oppElo = fight.oppElo
+		duel.eloChange = ns.EloChange(duel.myElo, duel.oppElo, won)
+	end
 	if ns.GetDB().logging or LoggingCombat() then
 		duel.logged = true -- the combat log file has it
 	end
@@ -323,8 +341,14 @@ local function Finish(winner, loser, how)
 	ns.SendResult(opp, duel)
 
 	local wins, losses = ns.GetRecord(opp)
-	print(("Duel Tracker: you %s %s (%d-%d against them)."):format(
-		won and "beat" or "lost to", ns.ColorName(opp, duel.oppClass), wins, losses))
+	local elo = ""
+	if duel.eloChange then
+		elo = (", Elo %+d, now %d"):format(duel.eloChange, duel.myElo + duel.eloChange)
+	elseif duel.elo then
+		elo = ", an Elo duel"
+	end
+	print(("Duel Tracker: you %s %s (%d-%d against them)%s."):format(
+		won and "beat" or "lost to", ns.ColorName(opp, duel.oppClass), wins, losses, elo))
 end
 
 ---------------------------------------------------------------------------
