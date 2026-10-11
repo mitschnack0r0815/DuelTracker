@@ -49,6 +49,8 @@ SlashCmdList["DUELTRACKER"] = function(msg)
 		end
 	elseif msg == "duelists" then
 		ns.ShowDuelistsTab()
+	elseif msg == "debug" then
+		print("Duel Tracker: debug " .. (ns.ToggleDebug() and "on, chat messages about duels are printed." or "off."))
 	elseif msg == "cleartest" then
 		print(("Duel Tracker: removed %d test duels."):format(ns.ClearTestData()))
 	elseif msg ~= "" then

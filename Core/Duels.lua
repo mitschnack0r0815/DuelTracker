@@ -42,8 +42,18 @@ for how, format in pairs({
 	RESULTS[#RESULTS + 1] = { how = how, pattern = pattern, order = order }
 end
 
+-- The names may come as colored player links, and the line may end with a period
+local function Clean(message)
+	message = message:gsub("|H.-|h%[?(.-)%]?|h", "%1"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+	return (message:gsub("[%s%.]+$", ""))
+end
+
 -- winner, loser, how; nil when it's not a duel result
 local function ParseResult(message)
+	if type(message) ~= "string" or (issecretvalue and issecretvalue(message)) then
+		return nil
+	end
+	message = Clean(message)
 	for _, result in ipairs(RESULTS) do
 		local captures = { message:match(result.pattern) }
 		if #captures == #result.order then
@@ -374,16 +384,39 @@ hooksecurefunc("StartDuel", function(unit)
 end)
 
 local frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_LOGIN")
-frame:RegisterEvent("DUEL_REQUESTED")
-frame:RegisterEvent("DUEL_FINISHED")
-frame:RegisterEvent("CHAT_MSG_SYSTEM")
-frame:RegisterEvent("PLAYER_TARGET_CHANGED")
-frame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
-frame:RegisterEvent("INSPECT_READY")
-frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+local debugging = false
+
+-- Prints every chat message that mentions a duel, with its event, to find result messages
+-- the parser misses; listens to all events while on
+function ns.ToggleDebug()
+	debugging = not debugging
+	if debugging then
+		frame:RegisterAllEvents()
+	else
+		frame:UnregisterAllEvents()
+		frame:RegisterEvents()
+	end
+	return debugging
+end
+
+local EVENTS = { "PLAYER_LOGIN", "DUEL_REQUESTED", "DUEL_FINISHED", "CHAT_MSG_SYSTEM", "PLAYER_TARGET_CHANGED",
+	"UPDATE_MOUSEOVER_UNIT", "INSPECT_READY", "PLAYER_REGEN_DISABLED", "NAME_PLATE_UNIT_ADDED" }
+function frame:RegisterEvents()
+	for _, event in ipairs(EVENTS) do
+		self:RegisterEvent(event)
+	end
+end
+frame:RegisterEvents()
 frame:SetScript("OnEvent", function(self, event, ...)
+	if debugging and event:find("^CHAT_MSG") then
+		local message = ...
+		if type(message) == "string" and not (issecretvalue and issecretvalue(message))
+			and message:lower():find("duel", 1, true) then
+			local winner, loser, how = ParseResult(message)
+			print(("Duel Tracker debug: %s \"%s\" -> %s"):format(event, (message:gsub("|", "||")),
+				winner and ("%s beat %s (%s)"):format(winner, loser, how) or "no match"))
+		end
+	end
 	if event == "CHAT_MSG_SYSTEM" then
 		local winner, loser, how = ParseResult((...))
 		if winner then
