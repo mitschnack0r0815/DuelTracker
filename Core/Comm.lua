@@ -33,7 +33,7 @@ local function Pump()
 	while tokens >= 1 and #queue > 0 do
 		local message = table.remove(queue, 1)
 		whispered[message.target] = now
-		local result = C_ChatInfo.SendAddonMessage(ns.PREFIX, message.text, "WHISPER", message.target)
+		local result = C_ChatInfo.SendAddonMessage(ns.PREFIX, message.text, "WHISPER", WhisperName(message.target))
 		if ns.IsDebugging() then
 			print(("Duel Tracker debug: sent %q to %q -> %s"):format(message.text, message.target, tostring(result)))
 		end
@@ -43,6 +43,16 @@ local function Pump()
 		pumping = true
 		C_Timer.After(1 / ns.SEND_RATE, Pump)
 	end
+end
+
+-- The name to whisper: players of our realm without the realm, names with a space (this
+-- client allows them) aren't found with it
+local function WhisperName(name)
+	local short, realm = name:match("^(.-)%-([^%-]+)$")
+	if short and realm == GetNormalizedRealmName() then
+		return short
+	end
+	return name
 end
 
 -- Send(target, kind, ...): the protocol goes after the kind
