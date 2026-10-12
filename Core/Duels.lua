@@ -310,17 +310,28 @@ end
 
 ---------------------------------------------------------------------------
 
-local function Finish(winner, loser, how)
+-- Result lines name us in full ("Arr Nold") where UnitName only gives the first part
+-- ("Arr"). Such a longer name is us unless it's a duel of someone else while we fight ours.
+local function IsMe(name, other)
 	local me = ns.Known(UnitName("player"))
-	local won = ns.SameName(winner, me)
-	if debugging then
-		local bytes = { (me or ""):byte(1, -1) }
-		print(("Duel Tracker debug: me %q (%s) realm %q, winner %q, loser %q, won %s, lost %s"):format(
-			tostring(me), table.concat(bytes, " "), tostring(GetNormalizedRealmName()), winner, loser,
-			tostring(won), tostring(ns.SameName(loser, me))))
+	if not me or not name then
+		return false
 	end
-	if not won and not ns.SameName(loser, me) then
-		return -- someone else's duel nearby
+	if ns.SameName(name, me) then
+		return true
+	end
+	return ns.ShortName(name):sub(1, #me + 1) == me .. " " and (not current or current.opp == ns.FullName(other))
+end
+
+local function Finish(winner, loser, how)
+	local won, lost = IsMe(winner, loser), IsMe(loser, winner)
+	if debugging then
+		print(("Duel Tracker debug: me %q, winner %q, loser %q, won %s, lost %s, opponent %q"):format(
+			tostring(ns.Known(UnitName("player"))), winner, loser, tostring(won), tostring(lost),
+			tostring(current and current.opp)))
+	end
+	if won == lost then
+		return -- someone else's duel nearby (both: can't tell)
 	end
 	local opp = ns.FullName(won and loser or winner)
 	-- A result without a duel we saw start (say after a /reload) still counts
