@@ -11,6 +11,7 @@ local _, ns = ...
 -- outside the game can then cut each duel out of the file.
 
 local current -- the duel asked for or being fought, see Begin
+local debugging = false -- /duels debug, see ns.ToggleDebug
 
 ---------------------------------------------------------------------------
 -- Result messages
@@ -304,6 +305,12 @@ end
 local function Finish(winner, loser, how)
 	local me = UnitName("player")
 	local won = ns.SameName(winner, me)
+	if debugging then
+		local bytes = { (me or ""):byte(1, -1) }
+		print(("Duel Tracker debug: me %q (%s) realm %q, winner %q, loser %q, won %s, lost %s"):format(
+			tostring(me), table.concat(bytes, " "), tostring(GetNormalizedRealmName()), winner, loser,
+			tostring(won), tostring(ns.SameName(loser, me))))
+	end
 	if not won and not ns.SameName(loser, me) then
 		return -- someone else's duel nearby
 	end
@@ -384,16 +391,15 @@ hooksecurefunc("StartDuel", function(unit)
 end)
 
 local frame = CreateFrame("Frame")
-local debugging = false
 
 -- Prints every chat message that mentions a duel, with its event, to find result messages
 -- the parser misses; listens to all events while on
 function ns.ToggleDebug()
 	debugging = not debugging
+	frame:UnregisterAllEvents()
 	if debugging then
 		frame:RegisterAllEvents()
 	else
-		frame:UnregisterAllEvents()
 		frame:RegisterEvents()
 	end
 	return debugging
@@ -420,7 +426,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
 	if event == "CHAT_MSG_SYSTEM" then
 		local winner, loser, how = ParseResult((...))
 		if winner then
-			Finish(winner, loser, how)
+			if debugging then
+				local ok, err = pcall(Finish, winner, loser, how)
+				if not ok then
+					print("Duel Tracker debug: error " .. tostring(err))
+				end
+			else
+				Finish(winner, loser, how)
+			end
 		end
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		OnFightStart()
