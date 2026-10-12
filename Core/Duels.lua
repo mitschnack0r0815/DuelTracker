@@ -290,23 +290,72 @@ local function SnapshotHealth(oppGUID)
 	return { me = ReadHealth("player"), opp = unit and ReadHealth(unit) or nil }
 end
 
--- Entering combat after the duel was asked for: the fight starts
-local function OnFightStart()
+-- Fills the sides of snapshot still missing; true when both are there
+local function Complete(snapshot, oppGUID)
+	local now = SnapshotHealth(oppGUID)
+	snapshot.me = snapshot.me or now.me
+	snapshot.opp = snapshot.opp or now.opp
+	return snapshot.me ~= nil and snapshot.opp ~= nil
+end
+
+-- The client hides health in combat, so the start is taken during the countdown before it,
+-- and filled in when combat starts if still missing
+local function TakeStartHealth()
 	if current and not current.fightStart then
-		current.fightStart = GetTime()
-		current.healthStart = SnapshotHealth(current.oppGUID)
+		current.healthStart = current.healthStart or {}
+		Complete(current.healthStart, current.oppGUID)
 	end
 end
 
--- The opponent wasn't a unit when the fight started: take their health the first time
--- they are, if that's still close to the start
+-- Entering combat after the duel was asked for: the fight starts
+local function OnFightStart()
+	if current and not current.fightStart then
+		TakeStartHealth()
+		current.fightStart = GetTime()
+	end
+end
+
+-- The opponent wasn't a unit when we took the start: take their health the first time
+-- they are, during the countdown or close to the start of the fight
 local function FillStartHealth(unit)
 	local fight = current
-	if fight and fight.healthStart and not fight.healthStart.opp and fight.oppGUID
-		and IsGUID(unit, fight.oppGUID) and GetTime() - fight.fightStart <= ns.START_HEALTH_GRACE then
+	if fight and fight.healthStart and not fight.healthStart.opp and IsGUID(unit, fight.oppGUID)
+		and (not fight.fightStart or GetTime() - fight.fightStart <= ns.START_HEALTH_GRACE) then
 		fight.healthStart.opp = ReadHealth(unit)
 	end
 end
+
+-- The end health is hidden until the client shows it again (when combat drops): tries
+-- every half second for a while, so it can be a few seconds after the result
+local function FillEndHealth(duel, oppGUID, tries)
+	local health = duel.health
+	if Complete(health.ends, oppGUID) or tries <= 0 then
+		if debugging then
+			local function Side(snapshot, key)
+				local side = snapshot and snapshot[key]
+				return side and ("%d/%d"):format(side.hp, side.max) or "?"
+			end
+			print(("Duel Tracker debug: health start me %s opp %s, end me %s opp %s, %d tries left"):format(
+				Side(health.start, "me"), Side(health.start, "opp"), Side(health.ends, "me"),
+				Side(health.ends, "opp"), tries))
+		end
+		-- Sides that stayed hidden are left out, and the snapshots when nothing is in them
+		health.start = health.start and next(health.start) and health.start or nil
+		health.ends = next(health.ends) and health.ends or nil
+		if not health.start and not health.ends then
+			duel.health = nil
+		end
+		ns.NotifyChanged()
+		return
+	end
+	C_Timer.After(ns.END_HEALTH_RETRY, function()
+		FillEndHealth(duel, oppGUID, tries - 1)
+	end)
+end
+
+-- "Duel starting: %d" -> a pattern
+local COUNTDOWN = "^" .. (DUEL_COUNTDOWN or "Duel starting: %d")
+	:gsub("[%^%$%(%)%.%[%]%*%+%-%?]", "%%%0"):gsub("%%d", "%%d+") .. "$"
 
 ---------------------------------------------------------------------------
 
@@ -359,7 +408,7 @@ local function Finish(winner, loser, how)
 		duel.peer = fight.peer
 		if fight.fightStart then
 			duel.dur = math.floor((GetTime() - fight.fightStart) * 10 + 0.5) / 10
-			duel.health = { start = fight.healthStart, ends = SnapshotHealth(fight.oppGUID) }
+			duel.health = { start = fight.healthStart, ends = {} }
 		end
 	end
 	duel.peer = duel.peer or ns.GetPeerVersion(opp)
@@ -379,6 +428,9 @@ local function Finish(winner, loser, how)
 	StopLoggingSoon()
 	current = nil
 	ns.AddDuel(duel)
+	if duel.health then
+		FillEndHealth(duel, duel.oppGUID, ns.END_HEALTH_TRIES)
+	end
 	ns.CheckReport(duel)
 	ns.SendResult(opp, duel)
 
@@ -447,7 +499,12 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		end
 	end
 	if event == "CHAT_MSG_SYSTEM" then
-		local winner, loser, how = ParseResult((...))
+		local message = ns.Known((...))
+		if message and message:match(COUNTDOWN) then
+			TakeStartHealth()
+			return
+		end
+		local winner, loser, how = ParseResult(message)
 		if winner then
 			if debugging then
 				local ok, err = pcall(Finish, winner, loser, how)

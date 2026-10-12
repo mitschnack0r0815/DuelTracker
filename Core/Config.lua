@@ -23,9 +23,15 @@ ns.MAX_LOG_EVENTS = 1500 -- per duel, the totals keep counting after that
 ns.LOG_AFTER_DUEL = 3
 ns.MAX_DUEL_SECONDS = 600
 
--- The opponent's starting health is taken when the fight starts, or when they first show
--- up as a unit (target, mouseover, nameplate) at most this many seconds later
+-- The client hides health in combat. The starting health is taken during the duel
+-- countdown; the opponent's also when they first show up as a unit (target, mouseover,
+-- nameplate) up to this many seconds into the fight
 ns.START_HEALTH_GRACE = 3
+
+-- The end health is tried this many times, this many seconds apart, after the result,
+-- until the client shows it again
+ns.END_HEALTH_TRIES = 20
+ns.END_HEALTH_RETRY = 0.5
 
 -- How one-sided a duel was, by the gap between both players' health at the end in percent
 -- of their max health: the first entry whose limit the gap is within. Colors (r, g, b)
