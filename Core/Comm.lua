@@ -116,6 +116,15 @@ function ns.GetPeerVersion(name)
 	return peers[ns.FullName(name)]
 end
 
+-- They see us in full ("Arr Nold") where we only know our first name ("Arr")
+local function IsUs(reported, me)
+	if ns.SameName(reported, me) then
+		return true
+	end
+	local short = ns.ShortName(me)
+	return reported ~= nil and ns.ShortName(reported):sub(1, #short + 1) == short .. " "
+end
+
 -- Compares their report with our duel; true when it was about this duel
 local function Check(duel, report)
 	if duel.me ~= ns.GetMyName() or duel.opp ~= report.sender
@@ -123,9 +132,9 @@ local function Check(duel, report)
 		or duel.confirmed or duel.disputed then
 		return false
 	end
-	local winner = duel.won and duel.me or duel.opp
-	local loser = duel.won and duel.opp or duel.me
-	if ns.SameName(report.winner, winner) and ns.SameName(report.loser, loser)
+	local winnerOK = duel.won and IsUs(report.winner, duel.me) or not duel.won and ns.SameName(report.winner, duel.opp)
+	local loserOK = duel.won and ns.SameName(report.loser, duel.opp) or not duel.won and IsUs(report.loser, duel.me)
+	if winnerOK and loserOK
 		and (duel.elo == true) == report.elo then
 		duel.confirmed = true
 	else
