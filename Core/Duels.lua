@@ -405,6 +405,10 @@ function ns.ToggleDebug()
 	return debugging
 end
 
+function ns.IsDebugging()
+	return debugging
+end
+
 local EVENTS = { "PLAYER_LOGIN", "DUEL_REQUESTED", "DUEL_FINISHED", "CHAT_MSG_SYSTEM", "PLAYER_TARGET_CHANGED",
 	"UPDATE_MOUSEOVER_UNIT", "INSPECT_READY", "PLAYER_REGEN_DISABLED", "NAME_PLATE_UNIT_ADDED" }
 function frame:RegisterEvents()

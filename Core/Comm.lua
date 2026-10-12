@@ -33,7 +33,10 @@ local function Pump()
 	while tokens >= 1 and #queue > 0 do
 		local message = table.remove(queue, 1)
 		whispered[message.target] = now
-		C_ChatInfo.SendAddonMessage(ns.PREFIX, message.text, "WHISPER", message.target)
+		local result = C_ChatInfo.SendAddonMessage(ns.PREFIX, message.text, "WHISPER", message.target)
+		if ns.IsDebugging() then
+			print(("Duel Tracker debug: sent %q to %q -> %s"):format(message.text, message.target, tostring(result)))
+		end
 		tokens = tokens - 1
 	end
 	if #queue > 0 then
