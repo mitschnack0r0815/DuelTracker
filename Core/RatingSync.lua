@@ -16,7 +16,7 @@ end
 
 local function AskTarget()
 	if not UnitIsPlayer("target") or UnitIsUnit("target", "player") or not UnitIsConnected("target")
-		or UnitFactionGroup("target") ~= UnitFactionGroup("player") then
+		or ns.Known(UnitFactionGroup("target")) ~= UnitFactionGroup("player") then
 		return -- whispers don't reach the other faction
 	end
 	local name = ns.FindDuelist(GetUnitName("target", true))

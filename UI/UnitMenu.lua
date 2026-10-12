@@ -28,7 +28,7 @@ local function GetPlayer(contextData)
 		if not UnitIsPlayer(unit) or UnitIsUnit(unit, "player") then
 			return nil
 		end
-		name = GetUnitName(unit, true)
+		name = ns.Known(GetUnitName(unit, true))
 	elseif contextData.name then
 		name = contextData.server and contextData.server ~= ""
 			and contextData.name .. "-" .. contextData.server or contextData.name

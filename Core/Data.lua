@@ -53,8 +53,18 @@ function ns.GetDB()
 	return DuelTrackerDB
 end
 
+-- In combat the client hides some unit values from addons (names, GUIDs, ...). Such
+-- "secret" values can be shown but not compared, tested or stored: nil instead.
+function ns.Known(value)
+	if issecretvalue and issecretvalue(value) then
+		return nil
+	end
+	return value
+end
+
 -- "Name" -> "Name-Realm"; names that already have a realm stay as they are
 function ns.FullName(name)
+	name = ns.Known(name)
 	if not name or name:find("-", 1, true) then
 		return name
 	end
@@ -66,6 +76,7 @@ function ns.ShortName(name)
 end
 
 function ns.SameName(a, b)
+	a, b = ns.Known(a), ns.Known(b)
 	return a and b and ns.FullName(a) == ns.FullName(b)
 end
 
@@ -178,6 +189,7 @@ end
 
 -- The list's spelling of name ("Name-Realm") when they're on it, in any case
 function ns.FindDuelist(name)
+	name = ns.Known(name)
 	if not name then
 		return nil
 	end
@@ -191,6 +203,7 @@ end
 
 -- "name" or "Name-Realm"; capitalized like the game does. false when it's us or no name.
 function ns.AddDuelist(name, class)
+	name, class = ns.Known(name), ns.Known(class)
 	name = name and name:trim()
 	if not name or name == "" then
 		return false

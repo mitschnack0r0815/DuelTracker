@@ -116,15 +116,20 @@ end
 -- Duels
 ---------------------------------------------------------------------------
 
+-- True when unit is the player with that GUID; false when we can't tell (in combat)
+local function IsGUID(unit, guid)
+	return guid ~= nil and ns.Known(UnitGUID(unit)) == guid
+end
+
 -- Class file name and level of a player, when the client knows them
 local function GetInfo(guid)
 	if not guid then
 		return nil, nil
 	end
-	local _, class = GetPlayerInfoByGUID(guid)
+	local class = ns.Known(select(2, GetPlayerInfoByGUID(guid)))
 	for _, unit in ipairs({ "target", "focus", "mouseover", "targettarget" }) do
-		if UnitGUID(unit) == guid then
-			return class, UnitLevel(unit)
+		if IsGUID(unit, guid) then
+			return class, ns.Known(UnitLevel(unit))
 		end
 	end
 	return class, nil
@@ -169,7 +174,7 @@ end
 -- Asks the server for the opponent's talents; INSPECT_READY brings them. Only works
 -- close by, so it's tried whenever we see them as a unit, at most every few seconds.
 local function TryInspect(unit)
-	if not current or current.oppSpec or not current.oppGUID or UnitGUID(unit) ~= current.oppGUID
+	if not current or current.oppSpec or not IsGUID(unit, current.oppGUID)
 		or not CanInspect(unit) or GetTime() - (current.inspected or 0) < ns.INSPECT_INTERVAL then
 		return
 	end
@@ -182,7 +187,7 @@ local function TryInspect(unit)
 end
 
 local function OnInspectReady(guid)
-	if current and guid == current.oppGUID and current.inspected and not current.oppSpec then
+	if current and ns.Known(guid) == current.oppGUID and current.inspected and not current.oppSpec then
 		current.oppSpec = ReadSpec(true)
 		if not (InspectFrame and InspectFrame:IsShown()) then
 			ClearInspectPlayer()
@@ -193,14 +198,17 @@ end
 -- Learns the opponent's GUID, class and level from a unit that is them
 local function LearnFromUnit(unit)
 	if current and UnitIsPlayer(unit) and ns.FullName(GetUnitName(unit, true)) == current.opp then
-		current.oppGUID = UnitGUID(unit)
-		current.oppClass = select(2, UnitClass(unit))
-		current.oppLevel = UnitLevel(unit)
+		current.oppGUID = ns.Known(UnitGUID(unit)) or current.oppGUID
+		current.oppClass = ns.Known(select(2, UnitClass(unit))) or current.oppClass
+		current.oppLevel = ns.Known(UnitLevel(unit)) or current.oppLevel
 		TryInspect(unit)
 	end
 end
 
 local function Begin(name, guid)
+	if not ns.FullName(name) then
+		return -- hidden from us (in combat); the result still counts without the start
+	end
 	current = {
 		opp = ns.FullName(name),
 		oppGUID = guid,
@@ -264,13 +272,13 @@ local function FindUnit(guid)
 		return nil
 	end
 	for _, unit in ipairs({ "target", "focus", "mouseover", "targettarget" }) do
-		if UnitGUID(unit) == guid then
+		if IsGUID(unit, guid) then
 			return unit
 		end
 	end
 	for i = 1, 40 do
 		local unit = "nameplate" .. i
-		if UnitGUID(unit) == guid then
+		if IsGUID(unit, guid) then
 			return unit
 		end
 	end
@@ -295,7 +303,7 @@ end
 local function FillStartHealth(unit)
 	local fight = current
 	if fight and fight.healthStart and not fight.healthStart.opp and fight.oppGUID
-		and UnitGUID(unit) == fight.oppGUID and GetTime() - fight.fightStart <= ns.START_HEALTH_GRACE then
+		and IsGUID(unit, fight.oppGUID) and GetTime() - fight.fightStart <= ns.START_HEALTH_GRACE then
 		fight.healthStart.opp = ReadHealth(unit)
 	end
 end
@@ -303,7 +311,7 @@ end
 ---------------------------------------------------------------------------
 
 local function Finish(winner, loser, how)
-	local me = UnitName("player")
+	local me = ns.Known(UnitName("player"))
 	local won = ns.SameName(winner, me)
 	if debugging then
 		local bytes = { (me or ""):byte(1, -1) }
@@ -322,10 +330,10 @@ local function Finish(winner, loser, how)
 		t = GetServerTime(),
 		ends = time(),
 		me = ns.GetMyName(),
-		myGUID = UnitGUID("player"),
+		myGUID = ns.Known(UnitGUID("player")),
 		opp = opp,
-		myClass = select(2, UnitClass("player")),
-		myLevel = UnitLevel("player"),
+		myClass = ns.Known(select(2, UnitClass("player"))),
+		myLevel = ns.Known(UnitLevel("player")),
 		won = won,
 		how = how,
 		mySpec = ReadSpec(false),
@@ -383,7 +391,7 @@ hooksecurefunc("StartDuel", function(unit)
 	unit = (unit == nil or unit == "") and "target" or unit
 	if UnitExists(unit) then
 		if UnitIsPlayer(unit) then
-			Begin(GetUnitName(unit, true), UnitGUID(unit))
+			Begin(GetUnitName(unit, true), ns.Known(UnitGUID(unit)))
 		end
 	else
 		Begin(unit, nil)

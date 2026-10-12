@@ -23,7 +23,7 @@ SlashCmdList["DUELTRACKER"] = function(msg)
 		-- /duels add <name>, or your target without a name
 		local name, class = msg:match("^add%s+(.+)$"), nil
 		if not name and UnitIsPlayer("target") then
-			name, class = GetUnitName("target", true), select(2, UnitClass("target"))
+			name, class = ns.Known(GetUnitName("target", true)), ns.Known(select(2, UnitClass("target")))
 		end
 		local added, fullName = ns.AddDuelist(name, class)
 		if added then
@@ -40,7 +40,7 @@ SlashCmdList["DUELTRACKER"] = function(msg)
 		end
 	elseif msg:match("^elo%s") or msg == "elo" then
 		-- /duels elo <name>, or your target without a name
-		local name = msg:match("^elo%s+(.+)$") or (UnitIsPlayer("target") and GetUnitName("target", true))
+		local name = msg:match("^elo%s+(.+)$") or (UnitIsPlayer("target") and ns.Known(GetUnitName("target", true)))
 		local ok, reason = ns.ChallengeElo(name)
 		if ok then
 			print(("Duel Tracker: challenged %s to an Elo duel."):format(ns.InkName(ns.FindDuelist(name))))
